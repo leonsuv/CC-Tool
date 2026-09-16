@@ -12,8 +12,10 @@ import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { PrinterConnectionsProvider } from './src/contexts/PrinterConnectionsContext';
 import { usePalette } from './src/components/StudioUI';
 import './global.css';
+import { LanguageProvider, useLanguage } from './src/i18n';
 
 function AppContent() {
+  useLanguage();
   const { colorScheme } = useTheme();
   const c = usePalette();
   const base = colorScheme === 'dark' ? DarkTheme : DefaultTheme;
@@ -45,10 +47,12 @@ function AppContent() {
 }
 export default function App() {
   return (
-    <ThemeProvider>
-      <PrinterConnectionsProvider>
-        <AppContent />
-      </PrinterConnectionsProvider>
-    </ThemeProvider>
+    <LanguageProvider>
+      <ThemeProvider>
+        <PrinterConnectionsProvider>
+          <AppContent />
+        </PrinterConnectionsProvider>
+      </ThemeProvider>
+    </LanguageProvider>
   );
 }

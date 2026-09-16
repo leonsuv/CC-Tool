@@ -13,6 +13,7 @@ import type { PrinterFile } from '../types';
 import { Button, Thumb, ui, usePalette } from './StudioUI';
 import { durationText, printPayload, sizeText } from '../utils/sdcp';
 import type { Payload } from '../utils/sdcp';
+import { tr } from '../i18n';
 
 export function PrintOptions({
   file,
@@ -62,11 +63,11 @@ export function PrintOptions({
       return;
     }
     Alert.alert(
-      'Druck starten?',
-      `${file.name}\n\nDruckbett frei und Filament eingelegt?${Number(layer) > 0 ? `\nFortsetzen ab Schicht ${layer}: Der vorhandene Druck muss zur Datei passen.` : ''}`,
+      tr('Druck starten?'),
+      `${file.name}\n\n${tr('Druckbett frei und Filament eingelegt?')}${Number(layer) > 0 ? `\n${tr('Fortsetzen')} · ${tr('Startschicht')} ${layer}` : ''}`,
       [
-        { text: 'Zurück', style: 'cancel' },
-        { text: 'Druck starten', onPress: () => void submit() },
+        { text: tr('Zurück'), style: 'cancel' },
+        { text: tr('Druck starten'), onPress: () => void submit() },
       ]
     );
   };
@@ -79,7 +80,7 @@ export function PrintOptions({
       <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }}>
         <View style={[ui.between, { padding: 20 }]}>
           <Text style={[ui.heading, { color: c.text, flex: 1 }]}>
-            Druck vorbereiten
+            {tr('Druck vorbereiten')}
           </Text>
           <Button
             label="Schließen"
@@ -108,7 +109,9 @@ export function PrintOptions({
               ['DRUCKZEIT', durationText(file.duration)],
             ].map(([label, value]) => (
               <View key={label} style={{ gap: 7 }}>
-                <Text style={[ui.label, { color: c.muted }]}>{label}</Text>
+                <Text style={[ui.label, { color: c.muted }]}>
+                  {tr(String(label))}
+                </Text>
                 <Text style={{ color: c.text, fontWeight: '600' }}>
                   {value}
                 </Text>
@@ -118,7 +121,9 @@ export function PrintOptions({
           <View
             style={[ui.card, { backgroundColor: c.card, borderColor: c.line }]}
           >
-            <Text style={[ui.heading, { color: c.text }]}>Druckoptionen</Text>
+            <Text style={[ui.heading, { color: c.text }]}>
+              {tr('Druckoptionen')}
+            </Text>
             {[
               {
                 label: 'Automatische Nivellierung',
@@ -141,10 +146,10 @@ export function PrintOptions({
                   <Text
                     style={{ color: c.text, fontWeight: '600', fontSize: 15 }}
                   >
-                    {option.label}
+                    {tr(option.label)}
                   </Text>
                   <Text style={[ui.body, { color: c.muted }]}>
-                    {option.hint}
+                    {tr(option.hint)}
                   </Text>
                 </View>
                 <Switch
@@ -157,14 +162,15 @@ export function PrintOptions({
             ))}
             <View style={{ gap: 6 }}>
               <Text style={{ color: c.text, fontWeight: '600' }}>
-                Startschicht
+                {tr('Startschicht')}
               </Text>
               <Text style={[ui.body, { color: c.muted }]}>
-                0 startet den vollständigen Druck. Andere Werte sind für die
-                gezielte Wiederaufnahme.
+                {tr(
+                  '0 startet den vollständigen Druck. Andere Werte sind für die gezielte Wiederaufnahme.'
+                )}
               </Text>
               <TextInput
-                accessibilityLabel="Startschicht"
+                accessibilityLabel={tr('Startschicht')}
                 value={layer}
                 onChangeText={setLayer}
                 keyboardType="number-pad"
@@ -176,13 +182,14 @@ export function PrintOptions({
               />
             </View>
             <Text style={[ui.body, { color: c.muted }]}>
-              Druckplatte: aktuelle Druckereinstellung wird übernommen.
+              {tr('Druckplatte: aktuelle Druckereinstellung wird übernommen.')}
             </Text>
           </View>
           {!allowed && (
             <Text style={[ui.body, { color: c.danger }]}>
-              Ein neuer Druck ist erst möglich, wenn der Drucker verbunden und
-              bereit ist.
+              {tr(
+                'Ein neuer Druck ist erst möglich, wenn der Drucker verbunden und bereit ist.'
+              )}
             </Text>
           )}
           {!!error && (

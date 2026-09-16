@@ -12,6 +12,7 @@ import {
 } from '../components/StudioUI';
 import { basename, statusText } from '../utils/sdcp';
 import { isStoppable } from '../types';
+import { tr } from '../i18n';
 
 export function HomeScreen({ navigation }: any) {
   const c = usePalette();
@@ -22,7 +23,7 @@ export function HomeScreen({ navigation }: any) {
         <View style={ui.between}>
           <Text style={[ui.label, { color: c.accent }]}>CC TOOL / STUDIO</Text>
           <Pressable
-            accessibilityLabel="Einstellungen"
+            accessibilityLabel={tr('Einstellungen')}
             onPress={() => navigation.navigate('Settings')}
             hitSlop={16}
           >
@@ -31,10 +32,10 @@ export function HomeScreen({ navigation }: any) {
         </View>
         <View style={{ gap: 9 }}>
           <Text style={[ui.title, { fontSize: 36, color: c.text }]}>
-            Deine Werkstatt.
+            {tr('Deine Werkstatt.')}
           </Text>
           <Text style={[ui.body, { color: c.muted }]}>
-            Alles für deinen nächsten Druck. Direkt im WLAN.
+            {tr('Alles für deinen nächsten Druck. Direkt im WLAN.')}
           </Text>
         </View>
         <View
@@ -59,10 +60,10 @@ export function HomeScreen({ navigation }: any) {
                 lineHeight: 30,
               }}
             >
-              Von der Datei{'\n'}zum fertigen Druck.
+              {tr('Von der Datei\nzum fertigen Druck.')}
             </Text>
             <Text style={{ color: c.ink, fontSize: 12, opacity: 0.8 }}>
-              Dateien · Drucke · Timelapses
+              {tr('Dateien · Drucke · Timelapses')}
             </Text>
           </View>
           <Image
@@ -72,9 +73,11 @@ export function HomeScreen({ navigation }: any) {
           />
         </View>
         <View style={ui.between}>
-          <Text style={[ui.heading, { color: c.text }]}>Deine Drucker</Text>
+          <Text style={[ui.heading, { color: c.text }]}>
+            {tr('Deine Drucker')}
+          </Text>
           <Pressable
-            accessibilityLabel="Drucker neu verbinden"
+            accessibilityLabel={tr('Aktualisieren')}
             onPress={reconnectAll}
             hitSlop={14}
           >
@@ -113,7 +116,7 @@ export function HomeScreen({ navigation }: any) {
                 good={printer.connectionStatus === 'connected'}
               />
               <Text style={{ color: c.muted, fontSize: 12 }}>
-                {`Bauraum ${printer.status?.TempOfBox === undefined ? '—' : Math.round(printer.status.TempOfBox)}°`}
+                {`${tr('Bauraum')} ${printer.status?.TempOfBox === undefined ? '—' : Math.round(printer.status.TempOfBox)}°`}
               </Text>
             </View>
             {!!printer.status?.PrintInfo?.Filename && (

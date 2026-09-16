@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePrinterConnections } from '../contexts/PrinterConnectionsContext';
 import { Button, ui, usePalette } from '../components/StudioUI';
 import { checkLocalNetworkPermission } from '../utils/LocalNetworkUtils';
+import { tr } from '../i18n';
 export function AddEditPrinterScreen({ navigation }: any) {
   const c = usePalette();
   const { addPrinter } = usePrinterConnections();
@@ -23,18 +24,22 @@ export function AddEditPrinterScreen({ navigation }: any) {
           icon="arrow-back"
           onPress={() => navigation.goBack()}
         />
-        <Text style={[ui.title, { color: c.text }]}>Drucker verbinden</Text>
+        <Text style={[ui.title, { color: c.text }]}>
+          {tr('Drucker verbinden')}
+        </Text>
         <Text style={[ui.body, { color: c.muted }]}>
-          Dein Centauri Carbon und dein Handy müssen im selben WLAN sein.
+          {tr(
+            'Dein Centauri Carbon und dein Handy müssen im selben WLAN sein.'
+          )}
         </Text>
         <View
           style={[ui.card, { backgroundColor: c.card, borderColor: c.line }]}
         >
           <Text style={{ color: c.text, fontWeight: '600' }}>
-            Name in der App
+            {tr('Name in der App')}
           </Text>
           <TextInput
-            accessibilityLabel="Druckername"
+            accessibilityLabel={tr('Druckername')}
             value={name}
             onChangeText={setName}
             maxLength={50}
@@ -44,7 +49,7 @@ export function AddEditPrinterScreen({ navigation }: any) {
             IP-Adresse oder Hostname
           </Text>
           <TextInput
-            accessibilityLabel="IP-Adresse"
+            accessibilityLabel={tr('IP-Adresse')}
             placeholder="192.168.1.100"
             placeholderTextColor={c.muted}
             autoCapitalize="none"
@@ -54,8 +59,9 @@ export function AddEditPrinterScreen({ navigation }: any) {
             style={[ui.input, { borderColor: c.line, color: c.text }]}
           />
           <Text style={[ui.body, { color: c.muted }]}>
-            Die IP-Adresse findest du am Drucker unter Einstellungen → Netzwerk.
-            Bei Bedarf kannst du einen Port ergänzen, zum Beispiel :3030.
+            {tr(
+              'Die IP-Adresse findest du am Drucker unter Einstellungen → Netzwerk. Bei Bedarf kannst du einen Port ergänzen, zum Beispiel :3030.'
+            )}
           </Text>
         </View>
         {!!error && <Text style={[ui.body, { color: c.danger }]}>{error}</Text>}

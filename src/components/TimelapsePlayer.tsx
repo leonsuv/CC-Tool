@@ -3,6 +3,7 @@ import { Text, View } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEvent } from 'expo';
 import { usePalette } from './StudioUI';
+import { tr } from '../i18n';
 
 export function TimelapsePlayer({ uri }: { uri: string }) {
   const c = usePalette();
@@ -27,11 +28,13 @@ export function TimelapsePlayer({ uri }: { uri: string }) {
         allowsPictureInPicture={false}
       />
       {status === 'loading' && (
-        <Text style={{ color: c.muted }}>Video wird geladen …</Text>
+        <Text style={{ color: c.muted }}>{tr('Video wird geladen …')}</Text>
       )}
       {error && (
         <Text style={{ color: c.danger }}>
-          Video kann nicht abgespielt werden. Versuche es über „Herunterladen“.{' '}
+          {tr(
+            'Video kann nicht abgespielt werden. Versuche es über „Herunterladen“.'
+          )}{' '}
           {error.message}
         </Text>
       )}

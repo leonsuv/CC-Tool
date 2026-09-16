@@ -47,6 +47,7 @@ import {
 import type { SavedVideo } from '../utils/downloads';
 import type { PrinterFile, PrintTask } from '../types';
 import { isPausable, isResumable, isStoppable } from '../types';
+import { tr } from '../i18n';
 
 type Tab = 'overview' | 'files' | 'history' | 'videos';
 const tabs: { id: Tab; name: string; icon: keyof typeof Ionicons.glyphMap }[] =
@@ -388,8 +389,8 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
           </Text>
           <Text style={{ color: c.muted, fontSize: 12 }}>
             {item.directory
-              ? 'Ordner öffnen'
-              : `${sizeText(item.size)}${item.layers ? ` · ${item.layers} Schichten` : ''}`}
+              ? tr('Ordner öffnen')
+              : `${sizeText(item.size)}${item.layers ? ` · ${item.layers} ${tr('Schichten')}` : ''}`}
           </Text>
           {!!item.createdAt && (
             <Text style={{ color: c.muted, fontSize: 12 }}>
@@ -448,7 +449,7 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
         </Text>
       </View>
       <Text style={{ color: c.muted, fontSize: 12 }}>
-        {item.printedLayers ?? '—'} / {item.layers ?? '—'} Schichten ·
+        {item.printedLayers ?? '—'} / {item.layers ?? '—'} {tr('Schichten')} ·
         Timelapse: {videoStatusText(item.videoStatus)}
       </Text>
     </Pressable>
@@ -486,7 +487,8 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
       <View style={{ gap: 6 }}>
         <Text style={[ui.heading, { color: c.text }]}>{item.name}</Text>
         <Text style={{ color: c.muted, fontSize: 12 }}>
-          {dateText(item.startedAt)} · {durationText(item.duration)} Druckzeit
+          {dateText(item.startedAt)} · {durationText(item.duration)}{' '}
+          {tr('DRUCKZEIT')}
         </Text>
       </View>
       <Badge
@@ -502,8 +504,12 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
       ) : (
         <Text style={[ui.body, { color: c.muted }]}>
           {item.videoStatus === 3
-            ? 'Der Drucker erstellt das Video noch. Aktualisiere die Liste später.'
-            : 'Für diesen Druck steht aktuell kein Video zum Download bereit.'}
+            ? tr(
+                'Der Drucker erstellt das Video noch. Aktualisiere die Liste später.'
+              )
+            : tr(
+                'Für diesen Druck steht aktuell kein Video zum Download bereit.'
+              )}
         </Text>
       )}
     </View>
@@ -660,7 +666,7 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
                 color: tab === item.id ? c.accent : c.muted,
               }}
             >
-              {item.name}
+              {tr(item.name)}
             </Text>
           </Pressable>
         ))}
@@ -668,7 +674,9 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
       {!connected && (
         <View style={{ padding: 14, backgroundColor: c.soft }}>
           <Text style={[ui.body, { color: c.text }]}>
-            Keine Live-Verbindung. Gespeicherte Videos bleiben verfügbar.
+            {tr(
+              'Keine Live-Verbindung. Gespeicherte Videos bleiben verfügbar.'
+            )}
           </Text>
           <Button label="Neu verbinden" secondary onPress={reconnectAll} />
         </View>
@@ -687,7 +695,9 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
             <Text style={[ui.body, { color: c.accent }]}>{notice}</Text>
           )}
           {!!busy && !download && (
-            <Text style={[ui.body, { color: c.muted }]}>Anfrage läuft …</Text>
+            <Text style={[ui.body, { color: c.muted }]}>
+              {tr('Anfrage läuft …')}
+            </Text>
           )}
           {!!download && (
             <>
@@ -794,7 +804,9 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
           />
           <View style={card}>
             <View style={ui.between}>
-              <Text style={[ui.heading, { color: c.text }]}>Temperaturen</Text>
+              <Text style={[ui.heading, { color: c.text }]}>
+                {tr('Temperaturen')}
+              </Text>
               <Ionicons name="thermometer-outline" size={21} color={c.muted} />
             </View>
             <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -836,7 +848,7 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
                   }}
                 >
                   <Text style={{ color: c.muted, fontSize: 12 }}>
-                    {item.label}
+                    {tr(item.label)}
                   </Text>
                   <Text
                     style={{ color: c.text, fontSize: 23, fontWeight: '600' }}
@@ -847,15 +859,17 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
                   </Text>
                   <Text style={{ color: c.muted, fontSize: 11 }}>
                     {item.key
-                      ? `Ziel ${item.target ?? '—'}° · Ändern`
-                      : 'Sensor'}
+                      ? `${tr('Ziel')} ${item.target ?? '—'}° · ${tr('Ändern')}`
+                      : tr('Sensor')}
                   </Text>
                 </Pressable>
               ))}
             </View>
           </View>
           <View style={card}>
-            <Text style={[ui.heading, { color: c.text }]}>Steuerung</Text>
+            <Text style={[ui.heading, { color: c.text }]}>
+              {tr('Steuerung')}
+            </Text>
             <Button
               label={`Druckgeschwindigkeit · ${print?.PrintSpeedPct ?? '—'} %`}
               secondary
@@ -890,13 +904,14 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
               />
             ))}
             <Text style={[ui.body, { color: c.muted }]}>
-              Die Timelapse-Aufnahme stellst du vor dem Start in den
-              Druckoptionen ein.
+              {tr(
+                'Die Timelapse-Aufnahme stellst du vor dem Start in den Druckoptionen ein.'
+              )}
             </Text>
           </View>
           <View style={card}>
             <Text style={[ui.heading, { color: c.text }]}>
-              Druckerinformationen
+              {tr('Druckerinformationen')}
             </Text>
             {[
               ['Modell', printer.deviceAttributes?.MachineName],
@@ -909,7 +924,7 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
               ],
             ].map(([label, value]) => (
               <View key={String(label)} style={ui.between}>
-                <Text style={{ color: c.muted }}>{String(label)}</Text>
+                <Text style={{ color: c.muted }}>{tr(String(label))}</Text>
                 <Text
                   selectable
                   style={{ color: c.text, flex: 1, textAlign: 'right' }}
@@ -922,7 +937,7 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
               value={newName}
               onChangeText={setNewName}
               maxLength={50}
-              placeholder="Neuer Druckername"
+              placeholder={tr('Neuer Druckername')}
               placeholderTextColor={c.muted}
               style={[ui.input, { color: c.text, borderColor: c.line }]}
             />
@@ -947,12 +962,14 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
               icon="unlink-outline"
               onPress={() =>
                 Alert.alert(
-                  'Drucker entfernen?',
-                  'Nur die Verbindung wird aus der App entfernt. Dateien bleiben auf dem Drucker.',
+                  tr('Drucker entfernen?'),
+                  tr(
+                    'Nur die Verbindung wird aus der App entfernt. Dateien bleiben auf dem Drucker.'
+                  ),
                   [
-                    { text: 'Behalten', style: 'cancel' },
+                    { text: tr('Behalten'), style: 'cancel' },
                     {
-                      text: 'Entfernen',
+                      text: tr('Entfernen'),
                       style: 'destructive',
                       onPress: () => {
                         removePrinter(printerId);
@@ -972,8 +989,8 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
               <View style={ui.between}>
                 <Text style={[ui.heading, { color: c.text }]}>
                   {tab === 'history'
-                    ? 'Deine letzten Drucke'
-                    : 'Momente in Bewegung'}
+                    ? tr('Deine letzten Drucke')
+                    : tr('Momente in Bewegung')}
                 </Text>
                 <Text style={{ color: c.muted }}>
                   {tab === 'history'
@@ -1016,7 +1033,7 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
                         fontWeight: '600',
                       }}
                     >
-                      {sort === 'name' ? 'A–Z ↓' : 'Neueste ↓'}
+                      {sort === 'name' ? 'A–Z ↓' : tr('Neueste ↓')}
                     </Text>
                   </Pressable>
                 </View>
@@ -1068,7 +1085,7 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
                           fontSize: 12,
                         }}
                       >
-                        {filter}
+                        {tr(filter)}
                       </Text>
                     </Pressable>
                   )
@@ -1219,7 +1236,7 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
               <>
                 <View style={ui.between}>
                   <Text style={[ui.title, { color: c.text }]}>
-                    Druckdetails
+                    {tr('Druckdetails')}
                   </Text>
                   <Button
                     label="Schließen"
@@ -1247,7 +1264,7 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
                     ['Timelapse', videoStatusText(selectedTask.videoStatus)],
                   ].map(([label, value]) => (
                     <View key={label} style={ui.between}>
-                      <Text style={{ color: c.muted }}>{label}</Text>
+                      <Text style={{ color: c.muted }}>{tr(label)}</Text>
                       <Text
                         style={{ color: c.text, flex: 1, textAlign: 'right' }}
                       >
@@ -1288,8 +1305,10 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
                       const file = candidates.find(item => item.path === path);
                       if (!file) {
                         Alert.alert(
-                          'Datei nicht mehr vorhanden',
-                          'Die Originaldatei muss zuerst wieder auf den Drucker übertragen werden.'
+                          tr('Datei nicht mehr vorhanden'),
+                          tr(
+                            'Die Originaldatei muss zuerst wieder auf den Drucker übertragen werden.'
+                          )
                         );
                         return;
                       }
@@ -1300,7 +1319,7 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
                 />
                 {busy === 'reprint' && (
                   <Text style={{ color: c.muted }}>
-                    Originaldatei wird geprüft …
+                    {tr('Originaldatei wird geprüft …')}
                   </Text>
                 )}
                 {!!failure && (
@@ -1336,7 +1355,9 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
                   {dateText(video.task.startedAt)}
                 </Text>
                 <Text style={[ui.body, { color: c.muted }]}>
-                  Wiedergabe und Vollbild steuerst du direkt im Videoplayer.
+                  {tr(
+                    'Wiedergabe und Vollbild steuerst du direkt im Videoplayer.'
+                  )}
                 </Text>
               </>
             )}
@@ -1352,7 +1373,9 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
           style={{ flex: 1, backgroundColor: c.bg, padding: 20, gap: 16 }}
         >
           <View style={ui.between}>
-            <Text style={[ui.title, { color: c.text }]}>Live-Kamera</Text>
+            <Text style={[ui.title, { color: c.text }]}>
+              {tr('Live-Kamera')}
+            </Text>
             <Button
               label="Schließen"
               secondary
@@ -1399,7 +1422,7 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
             {setting && (
               <>
                 <Text style={[ui.heading, { color: c.text }]}>
-                  {setting.label}
+                  {tr(setting.label)}
                 </Text>
                 <Text style={[ui.body, { color: c.muted }]}>
                   Zielwert von {setting.key === 'PrintSpeedPct' ? 10 : 0} bis{' '}
@@ -1410,7 +1433,7 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
                     : '. 0 schaltet die Heizung aus.'}
                 </Text>
                 <TextInput
-                  accessibilityLabel="Zielwert"
+                  accessibilityLabel={tr('Zielwert')}
                   value={setting.value}
                   onChangeText={value => setSetting({ ...setting, value })}
                   keyboardType="number-pad"
@@ -1427,7 +1450,7 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
                       value > setting.max
                     ) {
                       Alert.alert(
-                        'Ungültiger Wert',
+                        tr('Ungültiger Wert'),
                         `Bitte eine ganze Zahl von ${setting.key === 'PrintSpeedPct' ? 10 : 0} bis ${setting.max} eingeben.`
                       );
                       return;

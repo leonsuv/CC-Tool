@@ -1,4 +1,5 @@
 import type { PrinterFile, PrintTask } from '../types';
+import { locale, tr } from '../i18n';
 
 export type Payload = Record<string, any>;
 const number = (...values: unknown[]): number | undefined => {
@@ -133,15 +134,17 @@ export function parseHistory(payload: Payload): PrintTask[] {
 }
 
 export const videoStatusText = (status: number) =>
-  (
-    ({
-      0: 'Nicht aufgenommen',
-      1: 'Bereit',
-      2: 'Video gelöscht',
-      3: 'Wird erstellt',
-      4: 'Erstellung fehlgeschlagen',
-    }) as Record<number, string>
-  )[status] || 'Status unbekannt';
+  tr(
+    (
+      {
+        0: 'Nicht aufgenommen',
+        1: 'Bereit',
+        2: 'Video gelöscht',
+        3: 'Wird erstellt',
+        4: 'Erstellung fehlgeschlagen',
+      } as Record<number, string>
+    )[status] || 'Status unbekannt'
+  );
 export const durationText = (seconds?: number) =>
   seconds === undefined
     ? '—'
@@ -154,40 +157,42 @@ export const sizeText = (bytes?: number) =>
       : `${(bytes / 1048576).toFixed(1)} MB`;
 export const dateText = (time?: number) =>
   time
-    ? new Date(time < 1e12 ? time * 1000 : time).toLocaleString('de-DE', {
+    ? new Date(time < 1e12 ? time * 1000 : time).toLocaleString(locale(), {
         day: '2-digit',
         month: 'short',
         year: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
       })
-    : 'Datum nicht verfügbar';
+    : tr('Datum nicht verfügbar');
 export const statusText = (status?: number) =>
-  (
-    ({
-      0: 'Bereit',
-      1: 'Referenzfahrt',
-      5: 'Wird pausiert',
-      6: 'Pausiert',
-      7: 'Wird gestoppt',
-      8: 'Abgebrochen',
-      9: 'Abgeschlossen',
-      10: 'Datei wird geprüft',
-      11: 'Druckerprüfung',
-      12: 'Wird fortgesetzt',
-      13: 'Druckt',
-      14: 'Druckerfehler',
-      15: 'Bettnivellierung',
-      16: 'Aufheizen',
-      17: 'Resonanztest',
-      18: 'Druck startet',
-      19: 'Nivellierung abgeschlossen',
-      20: 'Aufgeheizt',
-      21: 'Referenzfahrt abgeschlossen',
-      22: 'Resonanztest abgeschlossen',
-    }) as Record<number, string>
-  )[status ?? -1] ||
-  (status === undefined ? 'Status wird geladen' : `Status ${status}`);
+  tr(
+    (
+      {
+        0: 'Bereit',
+        1: 'Referenzfahrt',
+        5: 'Wird pausiert',
+        6: 'Pausiert',
+        7: 'Wird gestoppt',
+        8: 'Abgebrochen',
+        9: 'Abgeschlossen',
+        10: 'Datei wird geprüft',
+        11: 'Druckerprüfung',
+        12: 'Wird fortgesetzt',
+        13: 'Druckt',
+        14: 'Druckerfehler',
+        15: 'Bettnivellierung',
+        16: 'Aufheizen',
+        17: 'Resonanztest',
+        18: 'Druck startet',
+        19: 'Nivellierung abgeschlossen',
+        20: 'Aufgeheizt',
+        21: 'Referenzfahrt abgeschlossen',
+        22: 'Resonanztest abgeschlossen',
+      } as Record<number, string>
+    )[status ?? -1] ||
+      (status === undefined ? 'Status wird geladen' : `Status ${status}`)
+  );
 
 export function printPayload(
   file: PrinterFile,

@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
+import { tr } from '../i18n';
 
 export function usePalette() {
   const { colorScheme } = useTheme();
@@ -83,7 +84,7 @@ export function Button({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={tr(label)}
       disabled={disabled || busy}
       onPress={onPress}
       android_ripple={{ color: '#88888833' }}
@@ -105,7 +106,9 @@ export function Button({
       ) : icon ? (
         <Ionicons name={icon} size={18} color={color} />
       ) : null}
-      <Text style={{ color, fontSize: 14, fontWeight: '700' }}>{label}</Text>
+      <Text style={{ color, fontSize: 14, fontWeight: '700' }}>
+        {tr(label)}
+      </Text>
     </Pressable>
   );
 }
@@ -183,7 +186,7 @@ export function Badge({
           color: good ? c.accent : c.muted,
         }}
       >
-        {text}
+        {tr(text)}
       </Text>
     </View>
   );
@@ -210,10 +213,10 @@ export function EmptyState({
         <Ionicons name={icon} size={42} color={c.muted} />
       )}
       <Text style={[ui.heading, { color: c.text, textAlign: 'center' }]}>
-        {title}
+        {tr(title)}
       </Text>
       <Text style={[ui.body, { color: c.muted, textAlign: 'center' }]}>
-        {text}
+        {tr(text)}
       </Text>
       {retry && (
         <Button label="Erneut laden" onPress={retry} secondary icon="refresh" />
@@ -248,14 +251,14 @@ export function SearchField({
       <TextInput
         value={value}
         onChangeText={onChangeText}
-        placeholder={placeholder}
+        placeholder={tr(placeholder)}
         placeholderTextColor={c.muted}
         style={{ flex: 1, minHeight: 48, color: c.text, fontSize: 14 }}
         autoCapitalize="none"
       />
       {!!value && (
         <Pressable
-          accessibilityLabel="Suche löschen"
+          accessibilityLabel={tr('Suche löschen')}
           onPress={() => onChangeText('')}
           hitSlop={12}
         >

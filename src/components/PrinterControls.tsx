@@ -18,6 +18,7 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import * as NavigationBar from 'expo-navigation-bar';
 import { cameraDocument } from '../utils/camera';
 import { latestValueSender } from '../utils/latestValueSender';
+import { tr } from '../i18n';
 import { Button, ui, usePalette } from './StudioUI';
 
 export function LiveCamera({
@@ -165,9 +166,9 @@ export function LiveCamera({
   return (
     <View style={[ui.card, { backgroundColor: c.card, borderColor: c.line }]}>
       <View style={ui.between}>
-        <Text style={[ui.heading, { color: c.text }]}>Live-Kamera</Text>
+        <Text style={[ui.heading, { color: c.text }]}>{tr('Live-Kamera')}</Text>
         <Switch
-          accessibilityLabel="Live-Kamera aktivieren"
+          accessibilityLabel={tr('Live-Kamera aktivieren')}
           value={enabled}
           onValueChange={value => {
             setEnabled(value);
@@ -182,12 +183,12 @@ export function LiveCamera({
       </View>
       {!enabled ? (
         <Text style={[ui.body, { color: c.muted }]}>
-          Kamera aus · spart Bandbreite. Die Steuerung bleibt verfügbar.
+          {tr('Kamera aus · spart Bandbreite. Die Steuerung bleibt verfügbar.')}
         </Text>
       ) : !connected ? (
-        <Text style={{ color: c.muted }}>Drucker offline</Text>
+        <Text style={{ color: c.muted }}>{tr('Drucker offline')}</Text>
       ) : !uri ? (
-        <Text style={{ color: c.muted }}>Kamera wird verbunden …</Text>
+        <Text style={{ color: c.muted }}>{tr('Kamera wird verbunden …')}</Text>
       ) : (
         <>
           {!full && foreground && (
@@ -203,7 +204,7 @@ export function LiveCamera({
               </View>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Kamerabild im Vollbild öffnen"
+                accessibilityLabel={tr('Kamerabild im Vollbild öffnen')}
                 onPress={() => setFull(true)}
                 style={StyleSheet.absoluteFill}
               />
@@ -212,9 +213,9 @@ export function LiveCamera({
         </>
       )}
       <View style={ui.between}>
-        <Text style={{ color: c.text }}>Bauraumbeleuchtung</Text>
+        <Text style={{ color: c.text }}>{tr('Bauraumbeleuchtung')}</Text>
         <Switch
-          accessibilityLabel="Bauraumbeleuchtung"
+          accessibilityLabel={tr('Bauraumbeleuchtung')}
           value={lightOn}
           disabled={!connected || lightBusy}
           trackColor={{ true: c.accent }}
@@ -243,7 +244,7 @@ export function LiveCamera({
           {fullscreen && stream()}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Vollbild schließen"
+            accessibilityLabel={tr('Vollbild schließen')}
             onPress={() => setFull(false)}
             style={{
               position: 'absolute',
@@ -265,7 +266,7 @@ export function LiveCamera({
               checked: lightOn,
               disabled: !connected || lightBusy,
             }}
-            accessibilityLabel="Bauraumbeleuchtung"
+            accessibilityLabel={tr('Bauraumbeleuchtung')}
             disabled={!connected || lightBusy}
             onPress={() => void toggleLight(!lightOn)}
             style={{
@@ -367,12 +368,12 @@ export function FanSlider({
   return (
     <View style={{ gap: 5 }}>
       <View style={ui.between}>
-        <Text style={{ color: c.text }}>{label}</Text>
+        <Text style={{ color: c.text }}>{tr(label)}</Text>
         <View style={ui.row}>
           <Text style={{ color: c.accent }}>{draft} %</Text>
           <Pressable
             accessibilityRole="switch"
-            accessibilityLabel={`${label} ein oder aus`}
+            accessibilityLabel={`${tr(label)} ${tr('Ein')} / ${tr('Aus')}`}
             accessibilityState={{ checked: draft > 0, disabled }}
             disabled={disabled}
             onPress={() => {
@@ -401,7 +402,7 @@ export function FanSlider({
             <Text
               style={{ color: draft > 0 ? c.ink : c.muted, fontWeight: '600' }}
             >
-              {draft > 0 ? 'Ein' : 'Aus'}
+              {tr(draft > 0 ? 'Ein' : 'Aus')}
             </Text>
           </Pressable>
         </View>
@@ -448,7 +449,7 @@ export function FanSlider({
             right: 0,
             height: 48,
           }}
-          accessibilityLabel={label}
+          accessibilityLabel={tr(label)}
           minimumValue={0}
           maximumValue={100}
           step={1}
