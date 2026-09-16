@@ -2,11 +2,15 @@
 
 Studio fork of [WalkerFrederick/CC-Tool](https://github.com/WalkerFrederick/CC-Tool), published by leonsuv.
 
-**[Download the latest Android APK (2.1.2)](https://github.com/leonsuv/CC-Tool/releases/latest)** · [All releases](https://github.com/leonsuv/CC-Tool/releases)
+**[Download the latest Android APK (2.1.3)](https://github.com/leonsuv/CC-Tool/releases/latest)** · [All releases](https://github.com/leonsuv/CC-Tool/releases)
 
 > **Note:** The user interface is currently available in German only (English localization planned).
 
 Install the APK from release assets. Android 7+ on ARM32/ARM64. These builds use a development signing key, excluded from the repository. Versions 2.0.0 and 2.1.0 are archived binaries without preserved matching source snapshots; 2.1.1 is the first committed Studio source baseline. See `docs/releases/` for provenance and limitations.
+
+## Studio 2.1.3 update
+
+Fan sliders update locally without waiting for the printer. Commands are coalesced and limited to one request per second. Each fan also has an Ein/Aus control: above 0% it switches to 0%, at 0% it switches to 100%. See [release notes](docs/releases/2.1.3.md).
 
 ## Studio 2.1.2 update
 
@@ -49,7 +53,7 @@ cd android
 NODE_ENV=production ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
 ```
 
-Output: `android/app/build/outputs/apk/release/app-release.apk`. Release includes its JavaScript bundle. No Metro server is required. Current source: version code 11, version 2.1.2; Android 7+ on ARM32/ARM64. Local prebuild creates a development keystore; it will not match the private local key used for published APKs. Configure your own release signing for redistribution.
+Output: `android/app/build/outputs/apk/release/app-release.apk`. Release includes its JavaScript bundle. No Metro server is required. Current source: version code 12, version 2.1.3; Android 7+ on ARM32/ARM64. Local prebuild creates a development keystore; it will not match the private local key used for published APKs. Configure your own release signing for redistribution.
 
 ### Verification
 
