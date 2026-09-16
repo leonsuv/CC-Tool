@@ -1,583 +1,1476 @@
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  Switch,
-  RefreshControl,
   Alert,
-  AppState,
-  AppStateStatus,
-  Dimensions,
+  FlatList,
   Modal,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  Switch,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Header } from '../components/Header';
 import { Ionicons } from '@expo/vector-icons';
-import { PrinterCard } from '../components/PrinterCard';
-import { useState, useCallback, useRef, useEffect } from 'react';
 import { WebView } from 'react-native-webview';
-import { useRoute } from '@react-navigation/native';
+import * as Sharing from 'expo-sharing';
 import { usePrinterConnections } from '../contexts/PrinterConnectionsContext';
-import { formatTextMaxEllipsis } from '~/utils/FormatUtils';
+import { usePrinterLibrary } from '../hooks/usePrinterLibrary';
+import { useFileThumbnails } from '../hooks/useFileThumbnails';
+import {
+  Badge,
+  Button,
+  EmptyState,
+  SearchField,
+  Thumb,
+  ui,
+  usePalette,
+} from '../components/StudioUI';
+import { PrintOptions } from '../components/PrintOptions';
+import { TimelapsePlayer } from '../components/TimelapsePlayer';
+import { LiveCamera, FanSlider } from '../components/PrinterControls';
+import {
+  basename,
+  dateText,
+  durationText,
+  mediaUrl,
+  sizeText,
+  statusText,
+  videoStatusText,
+} from '../utils/sdcp';
+import {
+  saveVideoIndex,
+  savedVideos,
+  startVideoDownload,
+  videoKey,
+} from '../utils/downloads';
+import type { SavedVideo } from '../utils/downloads';
+import type { PrinterFile, PrintTask } from '../types';
+import { isPausable, isResumable, isStoppable } from '../types';
 
-export const PrinterDetailsScreen = ({ navigation }: any) => {
-  const route = useRoute();
-  const { printerId } = route.params as { printerId: string };
-  const { printers, sendCommand, reconnectAll, removePrinter } =
+type Tab = 'overview' | 'files' | 'history' | 'videos';
+const tabs: { id: Tab; name: string; icon: keyof typeof Ionicons.glyphMap }[] =
+  [
+    { id: 'overview', name: 'Übersicht', icon: 'grid-outline' },
+    { id: 'files', name: 'Dateien', icon: 'folder-open-outline' },
+    { id: 'history', name: 'Verlauf', icon: 'time-outline' },
+    { id: 'videos', name: 'Timelapses', icon: 'film-outline' },
+  ];
+
+export function PrinterDetailsScreen({ navigation, route }: any) {
+  const c = usePalette();
+  const { printerId } = route.params;
+  const { printers, requestFeature, reconnectAll, removePrinter } =
     usePrinterConnections();
   const printer = printers.find(p => p.id === printerId);
-
-  const [refreshing, setRefreshing] = useState(false);
-  const [webViewKey, setWebViewKey] = useState(0);
-  const [chamberFanState, setChamberFanState] = useState(false);
-  const [modelFanState, setModelFanState] = useState(false);
-  const [sideFanState, setSideFanState] = useState(false);
-  const [isWebViewInteracting, setIsWebViewInteracting] = useState(false);
-  const [isFullScreen, setIsFullScreen] = useState(false);
-  const webViewInteractionTimeout = useRef<NodeJS.Timeout | null>(null);
-  const appState = useRef(AppState.currentState);
-
-  // Handle app state changes to remount WebView when app comes back from background
+  const connected = printer?.connectionStatus === 'connected';
+  const library = usePrinterLibrary(printerId, connected);
+  const [tab, setTab] = useState<Tab>('overview');
+  const fileThumbnails = useFileThumbnails(
+    printer?.ipAddress || '',
+    connected &&
+      tab === 'files' &&
+      !library.historyLoading &&
+      !library.filesLoading,
+    library.files,
+    library.history
+  );
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<'name' | 'date'>('name');
+  const [historyFilter, setHistoryFilter] = useState('Alle');
+  const [selectedFile, setSelectedFile] = useState<PrinterFile>();
+  const [selectedTask, setSelectedTask] = useState<PrintTask>();
+  const [camera, setCamera] = useState<string>();
+  const [cameraError, setCameraError] = useState('');
+  const [busy, setBusy] = useState('');
+  const [notice, setNotice] = useState('');
+  const [failure, setFailure] = useState('');
+  const [video, setVideo] = useState<{ task: PrintTask; uri: string }>();
+  const [downloads, setDownloads] = useState<SavedVideo[]>([]);
+  const [download, setDownload] = useState<{ id: string; progress: number }>();
+  const downloadRef = useRef<ReturnType<typeof startVideoDownload> | undefined>(
+    undefined
+  );
+  const actionLock = useRef(false);
+  const [setting, setSetting] = useState<{
+    label: string;
+    key: string;
+    max: number;
+    value: string;
+    fan?: boolean;
+  }>();
+  const [newName, setNewName] = useState('');
   useEffect(() => {
-    const handleAppStateChange = (nextAppState: AppStateStatus) => {
-      if (
-        appState.current.match(/inactive|background/) &&
-        nextAppState === 'active'
-      ) {
-        // App has come to the foreground, remount the WebView
-        console.log('App has come to the foreground, remounting WebView');
-        setWebViewKey(prevKey => prevKey + 1);
-
-        // If in full-screen, exit it
-        if (isFullScreen) {
-          setIsFullScreen(false);
-        }
-      }
-      appState.current = nextAppState;
-    };
-
-    const subscription = AppState.addEventListener(
-      'change',
-      handleAppStateChange
-    );
-
-    return () => {
-      subscription?.remove();
-    };
-  }, [isFullScreen]);
-
-  // Sync fan states with printer status
-  useEffect(() => {
-    if (printer?.status?.CurrentFanSpeed) {
-      setModelFanState((printer.status.CurrentFanSpeed.ModelFan || 0) > 0);
-      setChamberFanState((printer.status.CurrentFanSpeed.BoxFan || 0) > 0);
-      setSideFanState((printer.status.CurrentFanSpeed.AuxiliaryFan || 0) > 0);
-    }
-  }, [printer?.status?.CurrentFanSpeed]);
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (webViewInteractionTimeout.current) {
-        clearTimeout(webViewInteractionTimeout.current);
-      }
-    };
+    void savedVideos()
+      .then(setDownloads)
+      .catch(() => {});
   }, []);
+  useEffect(
+    () => () => {
+      void downloadRef.current?.cancel();
+    },
+    []
+  );
 
-  const handleBackPress = () => {
-    navigation.goBack();
-  };
-
-  const handleWebViewTouchStart = () => {
-    setIsWebViewInteracting(true);
-    // Clear any existing timeout
-    if (webViewInteractionTimeout.current) {
-      clearTimeout(webViewInteractionTimeout.current);
-      webViewInteractionTimeout.current = null;
-    }
-  };
-
-  const handleWebViewTouchEnd = () => {
-    // Set a timeout to reset the interaction state
-    // This gives a small buffer in case of gesture conflicts
-    webViewInteractionTimeout.current = setTimeout(() => {
-      setIsWebViewInteracting(false);
-      webViewInteractionTimeout.current = null;
-    }, 100);
-  };
-
-  const handleToggleFullScreen = () => {
-    setIsFullScreen(!isFullScreen);
-  };
-
-  const handlePrintControl = () => {
-    if (!printer) return;
-
-    const printStatusFromPrinter = printer.status?.PrintInfo?.Status || 0;
-    const canPause = printStatusFromPrinter === 13; // printing
-    const canResume = printStatusFromPrinter === 6; // paused
-
-    if (canPause) {
-      // Send pause command
-      const pauseCommand = {
-        Id: '',
-        Data: {
-          Cmd: 129,
-          Data: {},
-          RequestID: `pause-${Date.now()}`,
-          MainboardID: '',
-          TimeStamp: Date.now(),
-          From: 1,
-        },
-      };
-      console.log('Sending pause command:', pauseCommand);
-      sendCommand(printer.id, pauseCommand);
-    } else if (canResume) {
-      // Send resume command
-      const resumeCommand = {
-        Id: '',
-        Data: {
-          Cmd: 131,
-          Data: {},
-          RequestID: `resume-${Date.now()}`,
-          MainboardID: '',
-          TimeStamp: Date.now(),
-          From: 1,
-        },
-      };
-      console.log('Sending resume command:', resumeCommand);
-      sendCommand(printer.id, resumeCommand);
-    }
-  };
-
-  const handleStopPrint = () => {
-    if (!printer) return;
-
-    Alert.alert(
-      'Cancel Print',
-      `Are you sure you want to cancel the print? This action cannot be undone.`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Stop Print',
-          style: 'destructive',
-          onPress: () => {
-            // Send cancel command
-            const cancelCommand = {
-              Id: '',
-              Data: {
-                Cmd: 130,
-                Data: {},
-                RequestID: `cancel-${Date.now()}`,
-                MainboardID: '',
-                TimeStamp: Date.now(),
-                From: 1,
-              },
-            };
-            console.log('Sending cancel command:', cancelCommand);
-            sendCommand(printer.id, cancelCommand);
-          },
-        },
-      ]
-    );
-  };
-
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    reconnectAll();
-    // Keep the timeout to give visual feedback on the refresh control
-    setTimeout(() => setRefreshing(false), 1000);
-    handleWebViewTouchEnd();
-  }, [reconnectAll]);
-
-  const handleLightToggle = (isOn: boolean) => {
-    if (!printer) return;
-
-    const command = {
-      Id: `${printer.printerName}-id-${Date.now()}`,
-      Data: {
-        Cmd: 403,
-        Data: {
-          LightStatus: {
-            SecondLight: isOn,
-          },
-        },
-        RequestID: `light-toggle-${Date.now()}`,
-        MainboardID: '',
-        TimeStamp: 0,
-        From: 1,
-      },
-    };
-
-    sendCommand(printer.id, command);
-  };
-
-  const handleFanToggle = (
-    fanType: 'model' | 'chamber' | 'side',
-    isOn: boolean
-  ) => {
-    if (!printer) return;
-
-    // Update the appropriate state
-    switch (fanType) {
-      case 'model':
-        setModelFanState(isOn);
-        break;
-      case 'chamber':
-        setChamberFanState(isOn);
-        break;
-      case 'side':
-        setSideFanState(isOn);
-        break;
-    }
-
-    // Create the command with all current fan states
-    const command = {
-      Id: `${printer.printerName}-id-${Date.now()}`,
-      Data: {
-        Cmd: 403,
-        Data: {
-          TargetFanSpeed: {
-            ModelFan:
-              fanType === 'model' ? (isOn ? 100 : 0) : modelFanState ? 100 : 0,
-            AuxiliaryFan:
-              fanType === 'side' ? (isOn ? 100 : 0) : sideFanState ? 100 : 0,
-            BoxFan:
-              fanType === 'chamber'
-                ? isOn
-                  ? 100
-                  : 0
-                : chamberFanState
-                  ? 100
-                  : 0,
-          },
-        },
-        RequestID: `${fanType}-fan-toggle-${Date.now()}`,
-        MainboardID: '',
-        TimeStamp: 0,
-        From: 1,
-      },
-    };
-
-    sendCommand(printer.id, command);
-  };
-
-  const handleDeletePrinter = () => {
-    if (!printer) return;
-
-    Alert.alert(
-      'Delete Printer',
-      `Are you sure you want to delete ${printer.printerName}? This action cannot be undone.`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            removePrinter(printer.id);
-            navigation.goBack();
-          },
-        },
-      ]
-    );
-  };
-
-  if (!printer) {
+  if (!printer)
     return (
-      <SafeAreaView
-        edges={['top']}
-        className="flex-1 bg-slate-100 dark:bg-gray-900"
-      >
-        <Header title="Error" subtitle="Printer not found" />
-        <View className="flex-1 justify-center items-center">
-          <Text className="text-red-500">
-            Could not find the specified printer.
-          </Text>
-          <TouchableOpacity
-            onPress={handleBackPress}
-            className="mt-4 p-2 bg-blue-500 rounded"
-          >
-            <Text className="text-white">Go Back</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+      <EmptyState
+        title="Drucker nicht gefunden"
+        text="Bitte zur Druckerliste zurückgehen."
+      />
     );
-  }
+  const host = printer.ipAddress;
+  const status = printer.status;
+  const print = status?.PrintInfo;
+  const printCode = print?.Status;
+  const ready =
+    connected && printCode !== undefined && [0, 8, 9].includes(printCode);
+  const active = printCode !== undefined && isStoppable(printCode);
+  const card = [ui.card, { backgroundColor: c.card, borderColor: c.line }];
+  const localVideo = (task: PrintTask) =>
+    downloads.find(item => item.key === videoKey(host, task.id));
+  const thumb = (file: PrinterFile) =>
+    fileThumbnails[`${host}/${file.path}`] ||
+    mediaUrl(
+      host,
+      file.thumbnail ||
+        library.history.find(
+          item =>
+            !!item.thumbnail &&
+            (item.path === file.path || basename(item.path) === file.name)
+        )?.thumbnail
+    );
+  const run = async (key: string, action: () => Promise<void>) => {
+    if (actionLock.current) return;
+    actionLock.current = true;
+    setBusy(key);
+    setFailure('');
+    setNotice('');
+    try {
+      await action();
+    } catch (error) {
+      setFailure((error as Error).message);
+    } finally {
+      actionLock.current = false;
+      setBusy('');
+    }
+  };
+  const command = (cmd: number, label: string) =>
+    void run(label, async () => {
+      await requestFeature(printerId, cmd);
+      setNotice(`${label} bestätigt.`);
+    });
+  const deleteFile = (file: PrinterFile) => {
+    if (active && basename(print?.Filename || '') === file.name) {
+      setFailure('Die aktuell gedruckte Datei kann nicht gelöscht werden.');
+      return;
+    }
+    Alert.alert(
+      'Datei löschen?',
+      `${file.name}\n\nDie Datei wird dauerhaft vom Drucker entfernt.`,
+      [
+        { text: 'Behalten', style: 'cancel' },
+        {
+          text: 'Löschen',
+          style: 'destructive',
+          onPress: () =>
+            void run('delete', async () => {
+              await requestFeature(printerId, 259, {
+                FileList: [file.path],
+                FolderList: [],
+              });
+              setNotice('Datei gelöscht.');
+              await library.loadFiles(library.folder);
+            }),
+        },
+      ]
+    );
+  };
+  const prepareVideo = async (task: PrintTask) => {
+    if (!task.videoPath)
+      throw new Error('Der Drucker meldet keinen Videopfad für diesen Druck.');
+    const result = await requestFeature(printerId, 323, {
+      Url: [task.videoPath],
+    });
+    const path = Array.isArray(result.Data) ? result.Data[0] : result.VideoUrl;
+    if (typeof path !== 'string' || !path)
+      throw new Error(
+        'Der Drucker konnte das Video nicht freigeben. Bitte später erneut versuchen.'
+      );
+    const uri = mediaUrl(host, path);
+    if (!uri) throw new Error('Die Video-Adresse wird nicht unterstützt.');
+    return uri;
+  };
+  const watchVideo = (task: PrintTask) =>
+    void run(`watch-${task.id}`, async () => {
+      const uri = localVideo(task)?.uri || (await fetchVideo(task));
+      setVideo({ task, uri });
+    });
+  const fetchVideo = async (task: PrintTask) => {
+    const url = await prepareVideo(task);
+    setDownload({ id: task.id, progress: 0 });
+    const key = videoKey(host, task.id);
+    const job = startVideoDownload(
+      url,
+      key,
+      progress => setDownload({ id: task.id, progress }),
+      task.name
+    );
+    downloadRef.current = job;
+    try {
+      const result = await job.run();
+      await saveVideoIndex({
+        key,
+        name: task.name,
+        task,
+        ...result,
+        savedAt: Date.now(),
+      });
+      setDownloads(await savedVideos());
+      return result.uri;
+    } finally {
+      downloadRef.current = undefined;
+      setDownload(undefined);
+    }
+  };
+  const downloadVideo = (task: PrintTask) =>
+    void run(`download-${task.id}`, async () => {
+      if (downloadRef.current) return;
+      const existing = localVideo(task);
+      if (existing) {
+        setNotice('Dieses Video ist bereits offline gespeichert.');
+        return;
+      }
+      const url = await prepareVideo(task);
+      setDownload({ id: task.id, progress: 0 });
+      const key = videoKey(host, task.id);
+      const job = startVideoDownload(
+        url,
+        key,
+        progress => setDownload({ id: task.id, progress }),
+        task.name
+      );
+      downloadRef.current = job;
+      try {
+        const result = await job.run();
+        const entry = {
+          key,
+          name: task.name,
+          task,
+          ...result,
+          savedAt: Date.now(),
+        };
+        await saveVideoIndex(entry);
+        setDownloads(await savedVideos());
+        setNotice(
+          'Video offline in der App gespeichert. Über „Teilen“ kannst du es exportieren.'
+        );
+      } finally {
+        downloadRef.current = undefined;
+        setDownload(undefined);
+      }
+    });
+  const shareVideo = (task: PrintTask) =>
+    void run('share', async () => {
+      const saved = localVideo(task);
+      if (!saved) return;
+      if (!(await Sharing.isAvailableAsync()))
+        throw new Error('Teilen ist auf diesem Gerät nicht verfügbar.');
+      await Sharing.shareAsync(saved.uri, {
+        mimeType: 'video/mp4',
+        dialogTitle: `${task.name} – Timelapse`,
+        UTI: 'public.mpeg-4',
+      });
+    });
+  const videoButtons = (task: PrintTask) => {
+    const saved = localVideo(task);
+    const available =
+      !!saved || (task.videoStatus === 1 && !!task.videoPath && connected);
+    return (
+      <View style={{ gap: 10 }}>
+        <View style={[ui.row, { flexWrap: 'wrap' }]}>
+          <Button
+            label="Ansehen"
+            icon="play"
+            onPress={() => watchVideo(task)}
+            disabled={!available || !!busy}
+          />
+          {saved ? (
+            <Button
+              label="Teilen"
+              icon="share-outline"
+              secondary
+              onPress={() => shareVideo(task)}
+              disabled={!!busy}
+            />
+          ) : (
+            <Button
+              label="Herunterladen"
+              icon="download-outline"
+              secondary
+              onPress={() => downloadVideo(task)}
+              disabled={!available || !!busy}
+            />
+          )}
+        </View>
+        {saved && (
+          <Text style={{ color: c.accent, fontSize: 12 }}>
+            Offline gespeichert · {sizeText(saved.bytes)}
+          </Text>
+        )}
+      </View>
+    );
+  };
+  const refresh = () => {
+    if (!connected) reconnectAll();
+    else if (tab === 'files') void library.loadFiles(library.folder);
+    else if (tab === 'overview')
+      void run('refresh', async () => {
+        await requestFeature(printerId, 0);
+      });
+    else void library.loadHistory();
+  };
+  const changeTab = (value: Tab) => {
+    setTab(value);
+    setQuery('');
+    setFailure('');
+    setNotice('');
+  };
+  const showSetting = (
+    label: string,
+    key: string,
+    max: number,
+    value: number | undefined,
+    fan = false
+  ) => setSetting({ label, key, max, value: String(value ?? 0), fan });
 
-  // Get light status from printer data
-  const isLightOn = printer.status?.LightStatus?.SecondLight === 1;
+  const renderFile = ({ item }: { item: PrinterFile }) => (
+    <View style={[card, { padding: 15, gap: 12, marginBottom: 12 }]}>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() =>
+          item.directory
+            ? void library.loadFiles(item.path)
+            : setSelectedFile(item)
+        }
+        style={ui.row}
+      >
+        {item.directory ? (
+          <Ionicons
+            name="folder"
+            size={44}
+            color={c.accent}
+            style={{ width: 72, textAlign: 'center' }}
+          />
+        ) : (
+          <Thumb
+            uri={thumb(item)}
+            alternatives={library.history
+              .filter(
+                task =>
+                  task.path === item.path || basename(task.path) === item.name
+              )
+              .map(task => mediaUrl(host, task.thumbnail))
+              .filter((uri): uri is string => !!uri)}
+          />
+        )}
+        <View style={{ flex: 1, gap: 5 }}>
+          <Text
+            style={{
+              color: c.text,
+              fontSize: 16,
+              fontWeight: '600',
+              lineHeight: 22,
+            }}
+            numberOfLines={3}
+          >
+            {item.name}
+          </Text>
+          <Text style={{ color: c.muted, fontSize: 12 }}>
+            {item.directory
+              ? 'Ordner öffnen'
+              : `${sizeText(item.size)}${item.layers ? ` · ${item.layers} Schichten` : ''}`}
+          </Text>
+          {!!item.createdAt && (
+            <Text style={{ color: c.muted, fontSize: 12 }}>
+              {dateText(item.createdAt)}
+            </Text>
+          )}
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={c.muted} />
+      </Pressable>
+      {!item.directory && (
+        <View style={ui.between}>
+          <Button
+            label="Druckoptionen"
+            icon="options-outline"
+            secondary
+            onPress={() => setSelectedFile(item)}
+          />
+          <Pressable
+            accessibilityLabel={`${item.name} löschen`}
+            disabled={!connected || !!busy}
+            hitSlop={8}
+            style={{ padding: 12, opacity: connected && !busy ? 1 : 0.4 }}
+            onPress={() => deleteFile(item)}
+          >
+            <Ionicons name="trash-outline" size={20} color={c.danger} />
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+  const renderHistory = ({ item }: { item: PrintTask }) => (
+    <Pressable
+      onPress={() => setSelectedTask(item)}
+      accessibilityRole="button"
+      style={[card, { padding: 16, marginBottom: 12 }]}
+    >
+      <View style={ui.row}>
+        <Thumb uri={mediaUrl(host, item.thumbnail)} />
+        <View style={{ flex: 1, gap: 6 }}>
+          <Text
+            style={{ color: c.text, fontSize: 16, fontWeight: '600' }}
+            numberOfLines={3}
+          >
+            {item.name}
+          </Text>
+          <Text style={{ color: c.muted, fontSize: 12 }}>
+            {dateText(item.startedAt)}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" color={c.muted} size={18} />
+      </View>
+      <View style={ui.between}>
+        <Badge text={item.status} good={item.status === 'Abgeschlossen'} />
+        <Text style={{ color: c.muted, fontSize: 13 }}>
+          {durationText(item.duration)}
+        </Text>
+      </View>
+      <Text style={{ color: c.muted, fontSize: 12 }}>
+        {item.printedLayers ?? '—'} / {item.layers ?? '—'} Schichten ·
+        Timelapse: {videoStatusText(item.videoStatus)}
+      </Text>
+    </Pressable>
+  );
+  const renderVideo = ({ item }: { item: PrintTask }) => (
+    <View style={[card, { padding: 16, marginBottom: 15 }]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${item.name} ansehen`}
+        onPress={() =>
+          (localVideo(item) || (item.videoStatus === 1 && item.videoPath)) &&
+          watchVideo(item)
+        }
+        disabled={!!busy}
+      >
+        <Thumb uri={mediaUrl(host, item.thumbnail)} large video />
+        {(localVideo(item) || item.videoStatus === 1) && (
+          <View
+            style={{
+              position: 'absolute',
+              top: 65,
+              alignSelf: 'center',
+              backgroundColor: '#173D30E6',
+              width: 48,
+              height: 48,
+              borderRadius: 24,
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+          >
+            <Ionicons name="play" size={23} color="#FFFFFF" />
+          </View>
+        )}
+      </Pressable>
+      <View style={{ gap: 6 }}>
+        <Text style={[ui.heading, { color: c.text }]}>{item.name}</Text>
+        <Text style={{ color: c.muted, fontSize: 12 }}>
+          {dateText(item.startedAt)} · {durationText(item.duration)} Druckzeit
+        </Text>
+      </View>
+      <Badge
+        text={
+          localVideo(item)
+            ? 'Offline verfügbar'
+            : videoStatusText(item.videoStatus)
+        }
+        good={item.videoStatus === 1 || !!localVideo(item)}
+      />
+      {item.videoStatus === 1 || localVideo(item) ? (
+        videoButtons(item)
+      ) : (
+        <Text style={[ui.body, { color: c.muted }]}>
+          {item.videoStatus === 3
+            ? 'Der Drucker erstellt das Video noch. Aktualisiere die Liste später.'
+            : 'Für diesen Druck steht aktuell kein Video zum Download bereit.'}
+        </Text>
+      )}
+    </View>
+  );
 
-  // Get fan status from printer data and sync with local state
-  const isModelFanOn = modelFanState;
-  const isChamberFanOn = chamberFanState;
-  const isSideFanOn = sideFanState;
+  const filteredFiles = library.files
+    .filter(file =>
+      file.name.toLocaleLowerCase().includes(query.toLocaleLowerCase())
+    )
+    .sort(
+      (a, b) =>
+        Number(!!b.directory) - Number(!!a.directory) ||
+        (sort === 'name'
+          ? a.name.localeCompare(b.name, 'de', { numeric: true })
+          : (b.createdAt || 0) - (a.createdAt || 0))
+    );
+  const filteredHistory = library.history.filter(
+    task =>
+      task.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()) &&
+      (historyFilter === 'Alle' || task.status === historyFilter)
+  );
+  const remoteVideoTasks = library.history.filter(
+    task => task.videoStatus > 0 || !!localVideo(task)
+  );
+  const offlineTasks: PrintTask[] = downloads
+    .filter(
+      saved =>
+        saved.key.startsWith(`${host}/`) &&
+        !remoteVideoTasks.some(task => videoKey(host, task.id) === saved.key)
+    )
+    .map(
+      saved =>
+        saved.task || {
+          id: saved.key.slice(host.length + 1),
+          name: saved.name,
+          path: '',
+          status: 'Offline gespeichert',
+          videoStatus: 1,
+        }
+    );
+  const videoTasks = [...remoteVideoTasks, ...offlineTasks].filter(task =>
+    task.name.toLocaleLowerCase().includes(query.toLocaleLowerCase())
+  );
 
   return (
-    <SafeAreaView
-      edges={['top']}
-      className="flex-1 bg-slate-100 dark:bg-gray-900"
-    >
-      {!isFullScreen && (
-        <Header
-          title={formatTextMaxEllipsis(printer.printerName, 26)}
-          subtitle="View printer information"
-        />
-      )}
-      <View style={{ display: isFullScreen ? 'none' : 'flex', flex: 1 }}>
-        <ScrollView
-          className="flex-1 bg-slate-200 dark:bg-gray-800"
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-          scrollEventThrottle={16}
-          showsVerticalScrollIndicator={false}
-          scrollEnabled={!isWebViewInteracting}
-        >
-          <View className="p-2">
-            {/* Back Button */}
-            <TouchableOpacity
-              className="flex-row items-center mb-2 p-2"
-              onPress={handleBackPress}
-            >
-              <Ionicons name="arrow-back" size={24} color="#374151" />
-              <Text className="ml-2 text-gray-700 dark:text-gray-200 font-medium">
-                BACK
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: c.bg }}>
+      <View
+        style={{
+          paddingHorizontal: 22,
+          paddingTop: 6,
+          paddingBottom: 8,
+          gap: 4,
+        }}
+      >
+        <View style={ui.between}>
+          <Pressable
+            accessibilityLabel="Zur Druckerliste"
+            onPress={() => navigation.goBack()}
+            hitSlop={14}
+          >
+            <Ionicons name="arrow-back" size={23} color={c.text} />
+          </Pressable>
+          <Text style={[ui.label, { color: c.muted }]}>
+            {tab === 'files' ? printer.printerName : 'CC TOOL / STUDIO'}
+          </Text>
+          <Pressable
+            accessibilityLabel="Aktualisieren"
+            onPress={refresh}
+            hitSlop={14}
+          >
+            <Ionicons name="refresh" size={22} color={c.text} />
+          </Pressable>
+        </View>
+        <View style={ui.between}>
+          <View style={{ flex: 1, gap: 5 }}>
+            {tab !== 'files' && (
+              <Text style={[ui.heading, { color: c.text }]} numberOfLines={1}>
+                {printer.printerName}
               </Text>
-            </TouchableOpacity>
-
-            {/* Video Stream WebView */}
+            )}
+            <Text style={{ fontSize: 12, color: c.muted }}>{host}</Text>
+          </View>
+          <Badge
+            text={
+              connected
+                ? statusText(printCode)
+                : printer.connectionStatus === 'connecting'
+                  ? 'Verbindet …'
+                  : 'Offline'
+            }
+            good={connected}
+          />
+        </View>
+        {active && (
+          <View style={{ gap: 6 }}>
+            <Text numberOfLines={2} style={{ color: c.text, fontSize: 13 }}>
+              {basename(print?.Filename || '')}
+            </Text>
+            <View style={ui.between}>
+              <Text style={{ color: c.muted, fontSize: 12 }}>
+                {print?.CurrentLayer ?? 0} / {print?.TotalLayer ?? 0} Schichten
+              </Text>
+              <Text style={{ color: c.accent }}>
+                {Math.round(print?.Progress || 0)} %
+              </Text>
+            </View>
             <View
-              className="bg-gray-800 dark:bg-gray-600 rounded-lg mb-2 w-full overflow-hidden"
-              style={{ aspectRatio: 16 / 9 }}
-              pointerEvents="box-none"
+              style={{ height: 5, backgroundColor: c.line, borderRadius: 4 }}
             >
-              {printer.videoUrl ? (
-                <>
-                  <WebView
-                    key={webViewKey}
-                    source={{ uri: 'http://' + printer.videoUrl }}
-                    style={{
-                      flex: 1,
-                      backgroundColor: 'transparent',
-                      margin: 0,
-                      padding: 0,
-                    }}
-                    javaScriptEnabled={false}
-                    domStorageEnabled={false}
-                    scalesPageToFit={true}
-                    allowsInlineMediaPlayback={true}
-                    mediaPlaybackRequiresUserAction={false}
-                    scrollEnabled={true}
-                    bounces={false}
-                    showsHorizontalScrollIndicator={false}
-                    showsVerticalScrollIndicator={false}
-                    automaticallyAdjustContentInsets={false}
-                    contentInsetAdjustmentBehavior="never"
-                    onTouchStart={handleWebViewTouchStart}
-                    onTouchEnd={handleWebViewTouchEnd}
-                    onError={syntheticEvent => {
-                      const { nativeEvent } = syntheticEvent;
-                      console.warn('WebView error: ', nativeEvent);
-                    }}
-                    onHttpError={syntheticEvent => {
-                      const { nativeEvent } = syntheticEvent;
-                      console.warn('WebView HTTP error: ', nativeEvent);
-                    }}
-                  />
-                  <TouchableOpacity
-                    onPress={handleToggleFullScreen}
-                    className="absolute top-2 right-2 p-2 bg-black bg-opacity-50 rounded-full"
-                  >
-                    <Ionicons name="expand" size={24} color="white" />
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <View className="flex-1 justify-center items-center bg-gray-700">
-                  <Ionicons name="videocam-off" size={48} color="#9CA3AF" />
-                  <Text className="text-gray-400 mt-2 text-center">
-                    Video feed not available
-                  </Text>
-                  <Text className="text-gray-500 mt-1 text-sm text-center">
-                    Waiting for video stream...
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {/* Main Printer Card */}
-            <PrinterCard
-              printer={printer}
-              lastUpdate="3s ago"
-              showPrintControls={true}
-              onPrintControl={handlePrintControl}
-              onStopPrint={handleStopPrint}
-            />
-            {/* Printer Controls Card */}
-            <View className="bg-white dark:bg-gray-900 rounded-lg border border-gray-300 dark:border-gray-700 p-4 mt-2">
-              <Text className="text-xl font-bold text-gray-800 dark:text-gray-200">
-                CONTROLS
-              </Text>
-              {/* Light Toggle */}
-              <View className="flex-row items-center justify-between mt-2 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <View className="flex-row items-center">
-                  <Ionicons
-                    name={isLightOn ? 'bulb' : 'bulb-outline'}
-                    size={24}
-                    color={isLightOn ? '#3B82F6' : '#6B7280'}
-                  />
-                  <Text className="ml-3 text-gray-800 dark:text-gray-200 font-semibold text-lg">
-                    Printer Light
-                  </Text>
-                </View>
-                <Switch
-                  value={isLightOn}
-                  onValueChange={handleLightToggle}
-                  trackColor={{ false: '#D1D5DB', true: '#DBEAFE' }}
-                  thumbColor={isLightOn ? '#3B82F6' : '#9CA3AF'}
-                />
-              </View>
-
-              {/* Chamber Fan Toggle */}
-              <View className="flex-row items-center justify-between mt-2 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <View className="flex-row items-center">
-                  <Ionicons
-                    name={isChamberFanOn ? 'settings' : 'settings-outline'}
-                    size={24}
-                    color={isChamberFanOn ? '#3B82F6' : '#6B7280'}
-                  />
-                  <Text className="ml-3 text-gray-800 dark:text-gray-200 font-semibold text-lg">
-                    Chamber Fan
-                  </Text>
-                </View>
-                <Switch
-                  value={isChamberFanOn}
-                  onValueChange={isOn => handleFanToggle('chamber', isOn)}
-                  trackColor={{ false: '#D1D5DB', true: '#DBEAFE' }}
-                  thumbColor={isChamberFanOn ? '#3B82F6' : '#9CA3AF'}
-                />
-              </View>
-
-              {/* Model Fan Toggle */}
-              <View className="flex-row items-center justify-between mt-2 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <View className="flex-row items-center">
-                  <Ionicons
-                    name={isModelFanOn ? 'settings' : 'settings-outline'}
-                    size={24}
-                    color={isModelFanOn ? '#3B82F6' : '#6B7280'}
-                  />
-                  <Text className="ml-3 text-gray-800 dark:text-gray-200 font-semibold text-lg">
-                    Model Fan
-                  </Text>
-                </View>
-                <Switch
-                  value={isModelFanOn}
-                  onValueChange={isOn => handleFanToggle('model', isOn)}
-                  trackColor={{ false: '#D1D5DB', true: '#DBEAFE' }}
-                  thumbColor={isModelFanOn ? '#3B82F6' : '#9CA3AF'}
-                />
-              </View>
-
-              {/* Side Fan Toggle */}
-              <View className="flex-row items-center justify-between mt-2 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <View className="flex-row items-center">
-                  <Ionicons
-                    name={isSideFanOn ? 'settings' : 'settings-outline'}
-                    size={24}
-                    color={isSideFanOn ? '#3B82F6' : '#6B7280'}
-                  />
-                  <Text className="ml-3 text-gray-800 dark:text-gray-200 font-semibold text-lg">
-                    Side Fan
-                  </Text>
-                </View>
-                <Switch
-                  value={isSideFanOn}
-                  onValueChange={isOn => handleFanToggle('side', isOn)}
-                  trackColor={{ false: '#D1D5DB', true: '#DBEAFE' }}
-                  thumbColor={isSideFanOn ? '#3B82F6' : '#9CA3AF'}
-                />
-              </View>
-            </View>
-
-            <View className="bg-white dark:bg-gray-900 rounded-lg border border-gray-300 dark:border-gray-700 p-4 mb-4 mt-2">
-              <Text className="text-xl font-bold text-gray-800 dark:text-gray-200">
-                PRINTER SETTINGS
-              </Text>
-              {/* Delete Printer */}
-              <View className="flex-row items-center justify-between mt-2 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <View className="flex-row items-center">
-                  <Ionicons name="trash-outline" size={24} color="#EF4444" />
-                  <Text className="ml-3 text-gray-800 dark:text-gray-200 font-semibold text-lg">
-                    Unlink Printer
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  onPress={handleDeletePrinter}
-                  className="px-6 py-2 rounded-lg"
-                  activeOpacity={0.7}
-                >
-                  <Text className="text-red-500 font-semibold">UNLINK</Text>
-                </TouchableOpacity>
-              </View>
+              <View
+                style={{
+                  height: 5,
+                  borderRadius: 4,
+                  backgroundColor: c.accent,
+                  width: `${Math.max(0, Math.min(100, print?.Progress || 0))}%`,
+                }}
+              />
             </View>
           </View>
-        </ScrollView>
+        )}
       </View>
-      {/* Full-screen Modal */}
-      <Modal
-        visible={isFullScreen}
-        transparent={true}
-        onRequestClose={handleToggleFullScreen}
+      <View
+        style={{
+          flexDirection: 'row',
+          paddingHorizontal: 12,
+          borderBottomWidth: 1,
+          borderColor: c.line,
+        }}
       >
-        <SafeAreaView className="flex-1 justify-center items-center bg-black">
-          <WebView
-            source={{
-              html: `
-                    <html>
-                      <head>
-                        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes">
-                        <style>
-                          body, html, img {
-                            margin: 0;
-                            padding: 0;
-                            width: 100%;
-                            height: 100%;
-                            background-color: black;
-                            object-fit: contain;
-                          }
-                        </style>
-                      </head>
-                      <body>
-                        <img src="http://${printer.videoUrl}" />
-                      </body>
-                    </html>
-                  `,
-            }}
+        {tabs.map(item => (
+          <Pressable
+            accessibilityRole="tab"
+            accessibilityState={{ selected: tab === item.id }}
+            key={item.id}
+            onPress={() => changeTab(item.id)}
             style={{
-              width: Dimensions.get('window').height,
-              height: Dimensions.get('window').width,
-              transform: [{ rotate: '90deg' }],
+              flex: 1,
+              paddingVertical: 8,
+              alignItems: 'center',
+              gap: 3,
+              borderBottomWidth: 3,
+              borderColor: tab === item.id ? c.accent : 'transparent',
             }}
-            scalesPageToFit={true}
-            scrollEnabled={true}
-            bounces={false}
-            showsHorizontalScrollIndicator={false}
-            showsVerticalScrollIndicator={false}
-          />
-          <TouchableOpacity
-            onPress={handleToggleFullScreen}
-            className="absolute right-5 bottom-5 p-2 bg-black bg-opacity-50 rounded-full"
           >
-            <Ionicons name="contract" size={24} color="white" />
-          </TouchableOpacity>
+            <Ionicons
+              name={item.icon}
+              color={tab === item.id ? c.accent : c.muted}
+              size={19}
+            />
+            <Text
+              style={{
+                fontSize: 12,
+                fontWeight: '700',
+                color: tab === item.id ? c.accent : c.muted,
+              }}
+            >
+              {item.name}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+      {!connected && (
+        <View style={{ padding: 14, backgroundColor: c.soft }}>
+          <Text style={[ui.body, { color: c.text }]}>
+            Keine Live-Verbindung. Gespeicherte Videos bleiben verfügbar.
+          </Text>
+          <Button label="Neu verbinden" secondary onPress={reconnectAll} />
+        </View>
+      )}
+      {(!!failure || !!notice || !!busy || !!download) && (
+        <View style={{ padding: 14, backgroundColor: c.soft, gap: 8 }}>
+          {!!failure && (
+            <Text
+              accessibilityRole="alert"
+              style={[ui.body, { color: c.danger }]}
+            >
+              {failure}
+            </Text>
+          )}
+          {!!notice && (
+            <Text style={[ui.body, { color: c.accent }]}>{notice}</Text>
+          )}
+          {!!busy && !download && (
+            <Text style={[ui.body, { color: c.muted }]}>Anfrage läuft …</Text>
+          )}
+          {!!download && (
+            <>
+              <Text style={{ color: c.text }}>
+                Download{' '}
+                {download.progress < 0
+                  ? 'läuft …'
+                  : `${Math.round(download.progress * 100)} %`}
+              </Text>
+              <View
+                style={{ height: 5, backgroundColor: c.line, borderRadius: 4 }}
+              >
+                <View
+                  style={{
+                    height: 5,
+                    width: `${Math.max(2, download.progress * 100)}%`,
+                    backgroundColor: c.accent,
+                    borderRadius: 4,
+                  }}
+                />
+              </View>
+              <Button
+                label="Download abbrechen"
+                secondary
+                onPress={() => {
+                  void downloadRef.current?.cancel();
+                }}
+              />
+            </>
+          )}
+        </View>
+      )}
+
+      {tab === 'overview' ? (
+        <ScrollView
+          contentContainerStyle={{ padding: 20, gap: 16 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={busy === 'refresh'}
+              onRefresh={refresh}
+              tintColor={c.accent}
+            />
+          }
+        >
+          {active && (
+            <View style={[ui.row, { flexWrap: 'wrap' }]}>
+              <Button
+                label={isResumable(printCode!) ? 'Fortsetzen' : 'Pausieren'}
+                icon={isResumable(printCode!) ? 'play' : 'pause'}
+                disabled={
+                  !connected ||
+                  !!busy ||
+                  !(isPausable(printCode!) || isResumable(printCode!))
+                }
+                onPress={() =>
+                  command(
+                    isResumable(printCode!) ? 131 : 129,
+                    isResumable(printCode!) ? 'Fortsetzen' : 'Pausieren'
+                  )
+                }
+              />
+              <Button
+                label="Abbrechen"
+                danger
+                icon="stop"
+                disabled={!connected || !!busy}
+                onPress={() =>
+                  Alert.alert(
+                    'Druck abbrechen?',
+                    'Der aktuelle Druck wird beendet.',
+                    [
+                      { text: 'Weiterdrucken', style: 'cancel' },
+                      {
+                        text: 'Abbrechen',
+                        style: 'destructive',
+                        onPress: () => command(130, 'Druckabbruch'),
+                      },
+                    ]
+                  )
+                }
+              />
+            </View>
+          )}
+          <LiveCamera
+            key={host}
+            host={host}
+            connected={connected}
+            resolve={async () => {
+              const result = await requestFeature(printerId, 386, {
+                Enable: 1,
+              });
+              const uri = mediaUrl(host, result.VideoUrl);
+              if (!uri)
+                throw new Error('Keine Kamera-Adresse vom Drucker erhalten.');
+              return uri;
+            }}
+          />
+          <View style={[card, { paddingVertical: 10 }]}>
+            <View style={ui.between}>
+              <Text style={{ color: c.text, fontSize: 15 }}>
+                Bauraumbeleuchtung
+              </Text>
+              <Switch
+                value={!!status?.LightStatus?.SecondLight}
+                disabled={!connected || !!busy}
+                trackColor={{ true: c.accent }}
+                onValueChange={enabled =>
+                  void run('light', async () => {
+                    await requestFeature(printerId, 403, {
+                      LightStatus: { SecondLight: Number(enabled) },
+                    });
+                  })
+                }
+              />
+            </View>
+          </View>
+          <View style={card}>
+            <View style={ui.between}>
+              <Text style={[ui.heading, { color: c.text }]}>Temperaturen</Text>
+              <Ionicons name="thermometer-outline" size={21} color={c.muted} />
+            </View>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              {[
+                {
+                  label: 'Düse',
+                  temp: status?.TempOfNozzle,
+                  target: status?.TempTargetNozzle,
+                  key: 'TempTargetNozzle',
+                  max: 300,
+                },
+                {
+                  label: 'Druckbett',
+                  temp: status?.TempOfHotbed,
+                  target: status?.TempTargetHotbed,
+                  key: 'TempTargetHotbed',
+                  max: 110,
+                },
+                {
+                  label: 'Bauraum',
+                  temp: status?.TempOfBox,
+                  target: undefined,
+                  key: '',
+                  max: 0,
+                },
+              ].map(item => (
+                <Pressable
+                  key={item.label}
+                  disabled={!item.key || !connected || !!busy}
+                  onPress={() =>
+                    showSetting(item.label, item.key, item.max, item.target)
+                  }
+                  style={{
+                    flex: 1,
+                    backgroundColor: c.soft,
+                    padding: 12,
+                    borderRadius: 15,
+                    gap: 9,
+                  }}
+                >
+                  <Text style={{ color: c.muted, fontSize: 12 }}>
+                    {item.label}
+                  </Text>
+                  <Text
+                    style={{ color: c.text, fontSize: 23, fontWeight: '600' }}
+                  >
+                    {item.temp === undefined
+                      ? '—'
+                      : `${Math.round(item.temp)}°`}
+                  </Text>
+                  <Text style={{ color: c.muted, fontSize: 11 }}>
+                    {item.key
+                      ? `Ziel ${item.target ?? '—'}° · Ändern`
+                      : 'Sensor'}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+          <View style={card}>
+            <Text style={[ui.heading, { color: c.text }]}>Steuerung</Text>
+            <Button
+              label={`Druckgeschwindigkeit · ${print?.PrintSpeedPct ?? '—'} %`}
+              secondary
+              disabled={!connected || !!busy || !active}
+              onPress={() =>
+                showSetting(
+                  'Druckgeschwindigkeit',
+                  'PrintSpeedPct',
+                  200,
+                  print?.PrintSpeedPct
+                )
+              }
+            />
+
+            {(
+              [
+                { label: 'Modelllüfter', key: 'ModelFan' },
+                { label: 'Zusatzlüfter', key: 'AuxiliaryFan' },
+                { label: 'Bauraumlüfter', key: 'BoxFan' },
+              ] as const
+            ).map(fan => (
+              <FanSlider
+                key={fan.key}
+                label={fan.label}
+                value={status?.CurrentFanSpeed?.[fan.key] ?? 0}
+                disabled={!connected}
+                send={value =>
+                  requestFeature(printerId, 403, {
+                    TargetFanSpeed: { [fan.key]: value },
+                  })
+                }
+              />
+            ))}
+            <Text style={[ui.body, { color: c.muted }]}>
+              Die Timelapse-Aufnahme stellst du vor dem Start in den
+              Druckoptionen ein.
+            </Text>
+          </View>
+          <View style={card}>
+            <Text style={[ui.heading, { color: c.text }]}>
+              Druckerinformationen
+            </Text>
+            {[
+              ['Modell', printer.deviceAttributes?.MachineName],
+              ['Firmware', printer.deviceAttributes?.FirmwareVersion],
+              [
+                'Freier Speicher',
+                typeof printer.deviceAttributes?.RemainingMemory === 'number'
+                  ? sizeText(printer.deviceAttributes.RemainingMemory)
+                  : undefined,
+              ],
+            ].map(([label, value]) => (
+              <View key={String(label)} style={ui.between}>
+                <Text style={{ color: c.muted }}>{String(label)}</Text>
+                <Text
+                  selectable
+                  style={{ color: c.text, flex: 1, textAlign: 'right' }}
+                >
+                  {value ? String(value) : '—'}
+                </Text>
+              </View>
+            ))}
+            <TextInput
+              value={newName}
+              onChangeText={setNewName}
+              maxLength={50}
+              placeholder="Neuer Druckername"
+              placeholderTextColor={c.muted}
+              style={[ui.input, { color: c.text, borderColor: c.line }]}
+            />
+            <Button
+              label="Am Drucker umbenennen"
+              secondary
+              disabled={!newName.trim() || !connected || !!busy}
+              onPress={() =>
+                void run('rename', async () => {
+                  await requestFeature(printerId, 192, {
+                    Name: newName.trim(),
+                  });
+                  setNotice('Name am Drucker geändert.');
+                  setNewName('');
+                  await requestFeature(printerId, 1);
+                })
+              }
+            />
+            <Button
+              label="Drucker entfernen"
+              danger
+              icon="unlink-outline"
+              onPress={() =>
+                Alert.alert(
+                  'Drucker entfernen?',
+                  'Nur die Verbindung wird aus der App entfernt. Dateien bleiben auf dem Drucker.',
+                  [
+                    { text: 'Behalten', style: 'cancel' },
+                    {
+                      text: 'Entfernen',
+                      style: 'destructive',
+                      onPress: () => {
+                        removePrinter(printerId);
+                        navigation.goBack();
+                      },
+                    },
+                  ]
+                )
+              }
+            />
+          </View>
+        </ScrollView>
+      ) : (
+        <>
+          <View style={{ padding: 12, paddingBottom: 8, gap: 6 }}>
+            {tab !== 'files' && (
+              <View style={ui.between}>
+                <Text style={[ui.heading, { color: c.text }]}>
+                  {tab === 'history'
+                    ? 'Deine letzten Drucke'
+                    : 'Momente in Bewegung'}
+                </Text>
+                <Text style={{ color: c.muted }}>
+                  {tab === 'history'
+                    ? filteredHistory.length
+                    : videoTasks.length}
+                </Text>
+              </View>
+            )}
+            <SearchField
+              value={query}
+              onChangeText={setQuery}
+              placeholder={
+                tab === 'files' ? 'Dateiname suchen …' : 'Druckname suchen …'
+              }
+            />
+            {tab === 'files' && (
+              <>
+                <View style={ui.between}>
+                  <View style={ui.row}>
+                    <Button
+                      label="Intern"
+                      secondary
+                      onPress={() => void library.loadFiles('/local')}
+                      disabled={!connected || library.filesLoading}
+                    />
+                    <Button
+                      label="USB"
+                      secondary
+                      onPress={() => void library.loadFiles('/udisk')}
+                      disabled={!connected || library.filesLoading}
+                    />
+                  </View>
+                  <Pressable
+                    onPress={() => setSort(sort === 'name' ? 'date' : 'name')}
+                  >
+                    <Text
+                      style={{
+                        color: c.accent,
+                        fontSize: 13,
+                        fontWeight: '600',
+                      }}
+                    >
+                      {sort === 'name' ? 'A–Z ↓' : 'Neueste ↓'}
+                    </Text>
+                  </Pressable>
+                </View>
+                {library.folder.split('/').filter(Boolean).length > 1 && (
+                  <View style={ui.row}>
+                    {library.folder.split('/').filter(Boolean).length > 1 && (
+                      <Button
+                        label="Zurück"
+                        secondary
+                        onPress={() =>
+                          void library.loadFiles(
+                            library.folder.substring(
+                              0,
+                              library.folder.lastIndexOf('/')
+                            )
+                          )
+                        }
+                      />
+                    )}
+                    <Text style={{ color: c.muted, fontSize: 12, flex: 1 }}>
+                      {library.folder}
+                    </Text>
+                  </View>
+                )}
+              </>
+            )}
+            {tab === 'history' && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 8 }}
+              >
+                {['Alle', 'Abgeschlossen', 'Abgebrochen', 'Fehlgeschlagen'].map(
+                  filter => (
+                    <Pressable
+                      key={filter}
+                      onPress={() => setHistoryFilter(filter)}
+                      style={{
+                        backgroundColor:
+                          filter === historyFilter ? c.button : c.soft,
+                        paddingHorizontal: 12,
+                        paddingVertical: 9,
+                        borderRadius: 12,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: filter === historyFilter ? c.ink : c.muted,
+                          fontSize: 12,
+                        }}
+                      >
+                        {filter}
+                      </Text>
+                    </Pressable>
+                  )
+                )}
+              </ScrollView>
+            )}
+          </View>
+          {tab === 'files' ? (
+            <FlatList
+              data={filteredFiles}
+              renderItem={renderFile}
+              keyExtractor={file => file.path}
+              contentContainerStyle={{
+                paddingHorizontal: 20,
+                paddingBottom: 30,
+              }}
+              refreshing={library.filesLoading}
+              onRefresh={() => void library.loadFiles(library.folder)}
+              ListEmptyComponent={
+                <EmptyState
+                  loading={library.filesLoading}
+                  title={
+                    library.filesLoading
+                      ? 'Dateien werden geladen'
+                      : library.filesError
+                        ? 'Dateien nicht erreichbar'
+                        : query
+                          ? 'Keine Treffer'
+                          : 'Noch keine Dateien'
+                  }
+                  text={
+                    library.filesError ||
+                    (query
+                      ? 'Versuche einen anderen Suchbegriff.'
+                      : 'G-Code-Dateien auf diesem Speicher erscheinen hier.')
+                  }
+                  retry={
+                    library.filesError
+                      ? () => void library.loadFiles(library.folder)
+                      : undefined
+                  }
+                />
+              }
+            />
+          ) : tab === 'history' ? (
+            <FlatList
+              data={filteredHistory}
+              renderItem={renderHistory}
+              keyExtractor={task => task.id}
+              contentContainerStyle={{
+                paddingHorizontal: 20,
+                paddingBottom: 30,
+              }}
+              refreshing={library.historyLoading}
+              onRefresh={() => void library.loadHistory()}
+              ListHeaderComponent={
+                library.historyError && library.history.length ? (
+                  <Text style={{ color: c.danger }}>
+                    {library.historyError}
+                  </Text>
+                ) : null
+              }
+              ListEmptyComponent={
+                <EmptyState
+                  loading={library.historyLoading}
+                  title={
+                    library.historyLoading
+                      ? 'Druckdetails werden geladen'
+                      : library.historyError
+                        ? 'Verlauf nicht erreichbar'
+                        : 'Keine Drucke gefunden'
+                  }
+                  text={
+                    library.historyError ||
+                    'Abgeschlossene und abgebrochene Drucke erscheinen hier mit ihren Details.'
+                  }
+                  retry={
+                    library.historyError
+                      ? () => void library.loadHistory()
+                      : undefined
+                  }
+                />
+              }
+            />
+          ) : (
+            <FlatList
+              data={videoTasks}
+              renderItem={renderVideo}
+              keyExtractor={task => task.id}
+              contentContainerStyle={{
+                paddingHorizontal: 20,
+                paddingBottom: 30,
+              }}
+              refreshing={library.historyLoading}
+              onRefresh={() => void library.loadHistory()}
+              ListEmptyComponent={
+                <EmptyState
+                  icon="film-outline"
+                  loading={library.historyLoading}
+                  title={
+                    library.historyLoading
+                      ? 'Timelapses werden geladen'
+                      : 'Noch keine Timelapses'
+                  }
+                  text={
+                    library.historyError ||
+                    'Aktiviere „Timelapse aufnehmen“ im Druckdialog. Fertige Videos kannst du hier ansehen und offline speichern.'
+                  }
+                  retry={
+                    library.historyError
+                      ? () => void library.loadHistory()
+                      : undefined
+                  }
+                />
+              }
+            />
+          )}
+        </>
+      )}
+
+      {!!selectedFile && (
+        <PrintOptions
+          file={selectedFile}
+          thumbnail={thumb(selectedFile)}
+          platform={status?.PlatFormType ?? 0}
+          allowed={ready}
+          onClose={() => setSelectedFile(undefined)}
+          onStart={async payload => {
+            const latest = await requestFeature(printerId, 0);
+            if (![0, 8, 9].includes(latest.PrintInfo?.Status))
+              throw new Error(
+                'Der Drucker ist inzwischen beschäftigt. Bitte den aktuellen Druck prüfen.'
+              );
+            await requestFeature(printerId, 128, payload);
+            setNotice('Druckauftrag bestätigt.');
+            setTab('overview');
+          }}
+        />
+      )}
+      <Modal
+        visible={!!selectedTask}
+        animationType="slide"
+        onRequestClose={() => setSelectedTask(undefined)}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }}>
+          <ScrollView contentContainerStyle={{ padding: 22, gap: 20 }}>
+            {selectedTask && (
+              <>
+                <View style={ui.between}>
+                  <Text style={[ui.title, { color: c.text }]}>
+                    Druckdetails
+                  </Text>
+                  <Button
+                    label="Schließen"
+                    secondary
+                    onPress={() => setSelectedTask(undefined)}
+                  />
+                </View>
+                <Thumb large uri={mediaUrl(host, selectedTask.thumbnail)} />
+                <Text selectable style={[ui.heading, { color: c.text }]}>
+                  {selectedTask.name}
+                </Text>
+                <Badge
+                  text={selectedTask.status}
+                  good={selectedTask.status === 'Abgeschlossen'}
+                />
+                <View style={card}>
+                  {[
+                    ['Gestartet', dateText(selectedTask.startedAt)],
+                    ['Druckdauer', durationText(selectedTask.duration)],
+                    [
+                      'Schichten',
+                      `${selectedTask.printedLayers ?? '—'} / ${selectedTask.layers ?? '—'}`,
+                    ],
+                    ['Filament', selectedTask.filament || 'Nicht gemeldet'],
+                    ['Timelapse', videoStatusText(selectedTask.videoStatus)],
+                  ].map(([label, value]) => (
+                    <View key={label} style={ui.between}>
+                      <Text style={{ color: c.muted }}>{label}</Text>
+                      <Text
+                        style={{ color: c.text, flex: 1, textAlign: 'right' }}
+                      >
+                        {value}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+                {(selectedTask.videoStatus === 1 ||
+                  localVideo(selectedTask)) && (
+                  <Button
+                    label="Zur Timelapse"
+                    icon="film-outline"
+                    onPress={() => {
+                      setSelectedTask(undefined);
+                      changeTab('videos');
+                      setQuery(selectedTask.name);
+                    }}
+                  />
+                )}
+                <Button
+                  label="Erneut drucken"
+                  icon="print-outline"
+                  secondary
+                  disabled={!connected || !!busy}
+                  onPress={() =>
+                    void run('reprint', async () => {
+                      const path = selectedTask.path.startsWith('/')
+                        ? selectedTask.path
+                        : `/local/${selectedTask.path}`;
+                      const folder =
+                        path.substring(0, path.lastIndexOf('/')) || '/local';
+                      const { parseFiles } = await import('../utils/sdcp');
+                      const candidates = parseFiles(
+                        await requestFeature(printerId, 258, { Url: folder }),
+                        folder
+                      );
+                      const file = candidates.find(item => item.path === path);
+                      if (!file) {
+                        Alert.alert(
+                          'Datei nicht mehr vorhanden',
+                          'Die Originaldatei muss zuerst wieder auf den Drucker übertragen werden.'
+                        );
+                        return;
+                      }
+                      setSelectedTask(undefined);
+                      setSelectedFile(file);
+                    })
+                  }
+                />
+                {busy === 'reprint' && (
+                  <Text style={{ color: c.muted }}>
+                    Originaldatei wird geprüft …
+                  </Text>
+                )}
+                {!!failure && (
+                  <Text style={{ color: c.danger }}>{failure}</Text>
+                )}
+              </>
+            )}
+          </ScrollView>
         </SafeAreaView>
+      </Modal>
+      <Modal
+        visible={!!video}
+        animationType="slide"
+        onRequestClose={() => setVideo(undefined)}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }}>
+          <ScrollView contentContainerStyle={{ padding: 22, gap: 20 }}>
+            {video && (
+              <>
+                <View style={ui.between}>
+                  <Text style={[ui.title, { color: c.text }]}>Timelapse</Text>
+                  <Button
+                    label="Schließen"
+                    secondary
+                    onPress={() => setVideo(undefined)}
+                  />
+                </View>
+                <TimelapsePlayer key={video.uri} uri={video.uri} />
+                <Text style={[ui.heading, { color: c.text }]}>
+                  {video.task.name}
+                </Text>
+                <Text style={[ui.body, { color: c.muted }]}>
+                  {dateText(video.task.startedAt)}
+                </Text>
+                <Text style={[ui.body, { color: c.muted }]}>
+                  Wiedergabe und Vollbild steuerst du direkt im Videoplayer.
+                </Text>
+              </>
+            )}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+      <Modal
+        visible={!!camera}
+        animationType="slide"
+        onRequestClose={() => setCamera(undefined)}
+      >
+        <SafeAreaView
+          style={{ flex: 1, backgroundColor: c.bg, padding: 20, gap: 16 }}
+        >
+          <View style={ui.between}>
+            <Text style={[ui.title, { color: c.text }]}>Live-Kamera</Text>
+            <Button
+              label="Schließen"
+              secondary
+              onPress={() => setCamera(undefined)}
+            />
+          </View>
+          {camera && (
+            <WebView
+              source={{ uri: camera }}
+              style={{ flex: 1, backgroundColor: '#08110E' }}
+              javaScriptEnabled={false}
+              scalesPageToFit
+              allowsFullscreenVideo
+              onError={() =>
+                setCameraError(
+                  'Kamera nicht erreichbar. Bitte schließen und erneut öffnen.'
+                )
+              }
+              onHttpError={() =>
+                setCameraError('Die Kamera hat einen Fehler gemeldet.')
+              }
+            />
+          )}
+          {!!cameraError && (
+            <Text style={{ color: c.danger }}>{cameraError}</Text>
+          )}
+        </SafeAreaView>
+      </Modal>
+      <Modal
+        visible={!!setting}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setSetting(undefined)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: '#00000088',
+            justifyContent: 'center',
+            padding: 24,
+          }}
+        >
+          <View style={card}>
+            {setting && (
+              <>
+                <Text style={[ui.heading, { color: c.text }]}>
+                  {setting.label}
+                </Text>
+                <Text style={[ui.body, { color: c.muted }]}>
+                  Zielwert von {setting.key === 'PrintSpeedPct' ? 10 : 0} bis{' '}
+                  {setting.max}{' '}
+                  {setting.fan || setting.key === 'PrintSpeedPct' ? '%' : '°C'}
+                  {setting.fan || setting.key === 'PrintSpeedPct'
+                    ? ''
+                    : '. 0 schaltet die Heizung aus.'}
+                </Text>
+                <TextInput
+                  accessibilityLabel="Zielwert"
+                  value={setting.value}
+                  onChangeText={value => setSetting({ ...setting, value })}
+                  keyboardType="number-pad"
+                  style={[ui.input, { color: c.text, borderColor: c.line }]}
+                />
+                <Button
+                  label="Übernehmen"
+                  disabled={!!busy || !connected}
+                  onPress={() => {
+                    const value = Number(setting.value);
+                    if (
+                      !/^\d+$/.test(setting.value) ||
+                      value < (setting.key === 'PrintSpeedPct' ? 10 : 0) ||
+                      value > setting.max
+                    ) {
+                      Alert.alert(
+                        'Ungültiger Wert',
+                        `Bitte eine ganze Zahl von ${setting.key === 'PrintSpeedPct' ? 10 : 0} bis ${setting.max} eingeben.`
+                      );
+                      return;
+                    }
+                    void run('setting', async () => {
+                      await requestFeature(
+                        printerId,
+                        403,
+                        setting.fan
+                          ? { TargetFanSpeed: { [setting.key]: value } }
+                          : { [setting.key]: value }
+                      );
+                      setSetting(undefined);
+                      setNotice('Einstellung bestätigt.');
+                    });
+                  }}
+                />
+                <Button
+                  label="Zurück"
+                  secondary
+                  onPress={() => setSetting(undefined)}
+                />
+                {!!failure && (
+                  <Text style={{ color: c.danger }}>{failure}</Text>
+                )}
+              </>
+            )}
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
-};
+}

@@ -10,9 +10,10 @@
             "usesCleartextTraffic": true
           }
         }
-      ]
+      ],
+      "expo-video"
     ],
-    "version": "1.0.5",
+    "version": "2.1.1",
     "web": {
       "favicon": "./assets/favicon.png"
     },
@@ -35,8 +36,11 @@
       "bundleIdentifier": "dev.allisonf.cctool",
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "This app needs to access your local network to connect to your 3D printers.",
-        "NSBonjourServices": ["_bonjour._tcp", "_lnp._tcp."]
-      }    
+        "NSBonjourServices": [
+          "_bonjour._tcp",
+          "_lnp._tcp."
+        ]
+      }
     },
     "android": {
       "softwareKeyboardLayoutMode": "pan",
@@ -45,7 +49,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "dev.allisonf.cctool",
-      "versionCode": 7
+      "versionCode": 10
     },
     "developmentClient": {
       "silenceDeploymentWarnings": true
