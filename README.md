@@ -70,7 +70,7 @@ Print-state codes follow the newer Elegoo SDK mapping exposed by pycentauri: 6 p
 
 Welcome to CC Tool!
 
-![Screenshot 1](screenshots/HEADER.jpg)
+![Screenshot 1](HEADER.jpg)
 
 ## 📄 License
 
