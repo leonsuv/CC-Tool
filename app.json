@@ -13,7 +13,7 @@
       ],
       "expo-video"
     ],
-    "version": "2.1.1",
+    "version": "2.1.2",
     "web": {
       "favicon": "./assets/favicon.png"
     },
@@ -49,7 +49,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "dev.allisonf.cctool",
-      "versionCode": 10
+      "versionCode": 11
     },
     "developmentClient": {
       "silenceDeploymentWarnings": true

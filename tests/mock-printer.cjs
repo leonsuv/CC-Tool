@@ -49,6 +49,7 @@ wss.on('connection', ws => {
       case 320: data.HistoryData = history.map(task => task.TaskId); break;
       case 321: data.HistoryDetailList = history.filter(task => command.Data.Id.includes(task.TaskId)); break;
       case 323: data.Data = ['/videos/vase.mp4']; break;
+      case 386: data.VideoUrl = `http://127.0.0.1:${port}/thumb.png`; break;
       case 128: filename = command.Data.Filename; printStatus = 13; state.TimeLapseStatus = command.Data.Tlp_Switch; status(); break;
       case 129: printStatus = 6; status(); break;
       case 131: printStatus = 13; status(); break;

@@ -6,7 +6,6 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
-  Switch,
   Text,
   TextInput,
   View,
@@ -776,6 +775,13 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
             key={host}
             host={host}
             connected={connected}
+            lightOn={!!status?.LightStatus?.SecondLight}
+            setLight={async enabled => {
+              await requestFeature(printerId, 403, {
+                LightStatus: { SecondLight: Number(enabled) },
+              });
+              await requestFeature(printerId, 0);
+            }}
             resolve={async () => {
               const result = await requestFeature(printerId, 386, {
                 Enable: 1,
@@ -786,25 +792,6 @@ export function PrinterDetailsScreen({ navigation, route }: any) {
               return uri;
             }}
           />
-          <View style={[card, { paddingVertical: 10 }]}>
-            <View style={ui.between}>
-              <Text style={{ color: c.text, fontSize: 15 }}>
-                Bauraumbeleuchtung
-              </Text>
-              <Switch
-                value={!!status?.LightStatus?.SecondLight}
-                disabled={!connected || !!busy}
-                trackColor={{ true: c.accent }}
-                onValueChange={enabled =>
-                  void run('light', async () => {
-                    await requestFeature(printerId, 403, {
-                      LightStatus: { SecondLight: Number(enabled) },
-                    });
-                  })
-                }
-              />
-            </View>
-          </View>
           <View style={card}>
             <View style={ui.between}>
               <Text style={[ui.heading, { color: c.text }]}>Temperaturen</Text>

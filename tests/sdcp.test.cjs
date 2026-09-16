@@ -6,6 +6,13 @@ require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileMo
 const { parseFiles, parseHistory, mediaUrl, printPayload } = require('../src/utils/sdcp.ts');
 const { isResumable, isStoppable, getPrintStatus } = require('../src/types/index.ts');
 const { gcodeThumbnail } = require('../src/utils/thumbnail.ts');
+const { cameraDocument } = require('../src/utils/camera.ts');
+test('camera document fits the viewport without scrolling and escapes its URL', () => {
+  const html = cameraDocument('http://printer/video?a=1&b="test"');
+  assert.match(html, /object-fit:contain/);
+  assert.match(html, /overflow:hidden/);
+  assert.match(html, /&amp;b=&quot;test&quot;/);
+});
 
 test('G-code preview fallback accepts complete images and ignores truncated blocks', () => {
   assert.equal(gcodeThumbnail('; thumbnail begin 144x144 12\n; iVBORabc\n; def=\n; thumbnail end'), 'data:image/png;base64,iVBORabcdef=');
