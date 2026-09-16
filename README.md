@@ -2,11 +2,13 @@
 
 Studio fork of [WalkerFrederick/CC-Tool](https://github.com/WalkerFrederick/CC-Tool), published by leonsuv.
 
-**[Download the latest Android APK (2.1.3)](https://github.com/leonsuv/CC-Tool/releases/latest)** · [All releases](https://github.com/leonsuv/CC-Tool/releases)
-
-> **Note:** The user interface is currently available in German only (English localization planned).
+**[Download the latest Android APK (2.2.0)](https://github.com/leonsuv/CC-Tool/releases/latest)** · [All releases](https://github.com/leonsuv/CC-Tool/releases)
 
 Install the APK from release assets. Android 7+ on ARM32/ARM64. These builds use a development signing key, excluded from the repository. Versions 2.0.0 and 2.1.0 are archived binaries without preserved matching source snapshots; 2.1.1 is the first committed Studio source baseline. See `docs/releases/` for provenance and limitations.
+
+## Studio 2.2.0 update
+
+Internationalization (i18n) support: Full English and German translations for all screens, print options, controls, and timelapse playback. See [release notes](docs/releases/2.2.0.md).
 
 ## Studio 2.1.3 update
 
