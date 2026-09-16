@@ -17,6 +17,7 @@ import { WebView } from 'react-native-webview';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as NavigationBar from 'expo-navigation-bar';
 import { cameraDocument } from '../utils/camera';
+import { latestValueSender } from '../utils/latestValueSender';
 import { Button, ui, usePalette } from './StudioUI';
 
 export function LiveCamera({
@@ -322,60 +323,88 @@ export function FanSlider({
 }) {
   const c = usePalette();
   const [draft, setDraft] = useState(value);
+  // Do not write each drag event back to the native thumb: that can make it
+  // jump behind the finger when the JS/UI threads run at different speeds.
+  const [nativeValue, setNativeValue] = useState(value);
   const [error, setError] = useState('');
-  const pending = useRef<number | undefined>(undefined);
-  const inFlight = useRef(false);
+  const queue = useRef<ReturnType<typeof latestValueSender> | undefined>(
+    undefined
+  );
   const mounted = useRef(true);
   const dragging = useRef(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const sender = useRef(send);
   sender.current = send;
   useEffect(() => {
-    if (!dragging.current && !inFlight.current) setDraft(value);
+    if (!dragging.current && !queue.current?.busy()) {
+      queue.current?.observe(value);
+      setDraft(value);
+      setNativeValue(value);
+    }
   }, [value]);
   useEffect(() => {
     mounted.current = true;
+    if (!disabled)
+      queue.current = latestValueSender(async next => {
+        try {
+          await sender.current(next);
+          if (mounted.current) setError('');
+        } catch (e) {
+          if (mounted.current) setError((e as Error).message);
+          throw e;
+        }
+      });
     return () => {
       mounted.current = false;
-      clearTimeout(timer.current);
-      pending.current = undefined;
+      queue.current?.dispose();
+      queue.current = undefined;
     };
-  }, []);
-  const flush = async () => {
-    if (!mounted.current || inFlight.current || pending.current === undefined)
-      return;
-    const next = pending.current;
-    pending.current = undefined;
-    inFlight.current = true;
-    try {
-      await sender.current(next);
-      if (mounted.current) setError('');
-    } catch (e) {
-      if (mounted.current) setError((e as Error).message);
-    } finally {
-      inFlight.current = false;
-      if (mounted.current && pending.current !== undefined) void flush();
-    }
-  };
+  }, [disabled]);
   const change = (next: number, immediate = false) => {
     next = Math.round(next);
     setDraft(next);
-    pending.current = next;
-    if (immediate) {
-      clearTimeout(timer.current);
-      timer.current = undefined;
-      void flush();
-    } else if (!timer.current)
-      timer.current = setTimeout(() => {
-        timer.current = undefined;
-        void flush();
-      }, 250);
+    queue.current?.change(next, immediate);
   };
   return (
     <View style={{ gap: 5 }}>
       <View style={ui.between}>
         <Text style={{ color: c.text }}>{label}</Text>
-        <Text style={{ color: c.accent }}>{draft} %</Text>
+        <View style={ui.row}>
+          <Text style={{ color: c.accent }}>{draft} %</Text>
+          <Pressable
+            accessibilityRole="switch"
+            accessibilityLabel={`${label} ein oder aus`}
+            accessibilityState={{ checked: draft > 0, disabled }}
+            disabled={disabled}
+            onPress={() => {
+              const next = draft > 0 ? 0 : 100;
+              setNativeValue(next);
+              change(next, true);
+            }}
+            style={{
+              minWidth: 70,
+              minHeight: 44,
+              paddingHorizontal: 12,
+              borderRadius: 22,
+              flexDirection: 'row',
+              gap: 6,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: draft > 0 ? c.button : c.soft,
+              opacity: disabled ? 0.45 : 1,
+            }}
+          >
+            <Ionicons
+              name="power"
+              size={18}
+              color={draft > 0 ? c.ink : c.muted}
+            />
+            <Text
+              style={{ color: draft > 0 ? c.ink : c.muted, fontWeight: '600' }}
+            >
+              {draft > 0 ? 'Ein' : 'Aus'}
+            </Text>
+          </Pressable>
+        </View>
       </View>
       <View
         style={{
@@ -423,7 +452,7 @@ export function FanSlider({
           minimumValue={0}
           maximumValue={100}
           step={1}
-          value={draft}
+          value={nativeValue}
           disabled={disabled}
           minimumTrackTintColor="transparent"
           maximumTrackTintColor="transparent"
@@ -434,6 +463,7 @@ export function FanSlider({
           onValueChange={next => change(next)}
           onSlidingComplete={next => {
             dragging.current = false;
+            setNativeValue(next);
             change(next, true);
           }}
         />
