@@ -1,4 +1,6 @@
 # Dependencies
+qa/
+*.keystore
 node_modules/
 npm-debug.*
 yarn-debug.*
